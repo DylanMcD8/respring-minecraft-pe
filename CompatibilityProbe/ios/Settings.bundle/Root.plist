@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>FooterText</key>
+			<string>Automatic uses the iPad layout on iPad and iPhone Duo. Native Render Resolution draws the HUD and world at display resolution. Expanded View fits the game to the window size at launch. Turn it off for the original proportions. Cropping takes precedence in the iPhone layout. Restart Minecraft PE after changing display settings or folding to a different size.</string>
+			<key>Title</key>
+			<string>Display</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>automatic</string>
+			<key>Key</key>
+			<string>MinecraftGameLayout</string>
+			<key>Title</key>
+			<string>Game Layout</string>
+			<key>Titles</key>
+			<array>
+				<string>Automatic</string>
+				<string>iPhone</string>
+				<string>iPad</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>automatic</string>
+				<string>iphone</string>
+				<string>ipad</string>
+			</array>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>4</string>
+			<key>Key</key>
+			<string>MinecraftPhoneScreen</string>
+			<key>Title</key>
+			<string>iPhone Size</string>
+			<key>Titles</key>
+			<array>
+				<string>3.5-inch</string>
+				<string>4-inch</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>3.5</string>
+				<string>4</string>
+			</array>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>NativeGameResolution</string>
+			<key>Title</key>
+			<string>Native Render Resolution</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>ExpandWorldView</string>
+			<key>Title</key>
+			<string>Expanded View</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<false/>
+			<key>Key</key>
+			<string>FillScreenCropped</string>
+			<key>Title</key>
+			<string>Fill Screen (Cropped)</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>ShowFPS</string>
+			<key>Title</key>
+			<string>Show FPS</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Background terrain keeps controls responsive as chunks load. 30 FPS gives terrain more time to catch up during fast travel. Restart Minecraft PE after changing this setting.</string>
+			<key>Title</key>
+			<string>Gameplay</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>background60</string>
+			<key>Key</key>
+			<string>TerrainProcessing</string>
+			<key>Title</key>
+			<string>Terrain Processing</string>
+			<key>Titles</key>
+			<array>
+				<string>Original</string>
+				<string>Background (30 FPS)</string>
+				<string>Background (60 FPS)</string>
+				<string>Background (Up to 120 FPS)</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>original</string>
+				<string>background30</string>
+				<string>background60</string>
+				<string>background120</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

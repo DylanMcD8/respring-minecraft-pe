@@ -1,0 +1,12 @@
+{
+  "name": "Minecraft PE",
+  "version": "0.9.0",
+  "build": "1",
+  "bundle": "com.respring.minecraftpe.probe",
+  "family": [1, 2],
+  "port": "CompatibilityProbe",
+  "project": "MinecraftPE",
+  "header": "RespringHeader.webp",
+  "execution": "ARM/Thumb interpreter with verified native terrain and rendering routines",
+  "original_archive": "Original/Minecraft.ipa"
+}

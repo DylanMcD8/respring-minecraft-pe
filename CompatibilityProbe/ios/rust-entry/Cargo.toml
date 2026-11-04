@@ -1,0 +1,14 @@
+[package]
+name = "minecraft-probe-entry"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+name = "minecraft_probe"
+crate-type = ["staticlib"]
+
+[dependencies]
+touchHLE = { path = "../../compatibility-core", default-features = false, features = ["ios-static"] }
