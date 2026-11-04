@@ -25,7 +25,7 @@ if (args.app / 'Minecraft.ipa').read_bytes() != expected.read_bytes():
 args.output.parent.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(dir=args.output.parent) as tmp:
     archive = Path(tmp) / 'release.ipa'
-    with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as out:
+    with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, strict_timestamps=False) as out:
         for item in sorted(args.app.rglob('*')):
             if item.name in {'embedded.mobileprovision', '_CodeSignature', 'iTunesMetadata.plist'}:
                 parser.error(f'Unexpected signing or account data in {item.name}')
