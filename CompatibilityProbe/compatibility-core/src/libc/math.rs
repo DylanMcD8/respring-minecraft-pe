@@ -440,6 +440,11 @@ fn rint(env: &mut Environment, arg: f64) -> f64 {
         _ => unimplemented!(),
     }
 }
+// rint without the inexact flag, which isn't modelled anyway. Exact: every
+// f32 is an f64, and the rounded integer fits back in an f32.
+fn nearbyintf(env: &mut Environment, arg: f32) -> f32 {
+    rint(env, arg.into()) as f32
+}
 fn lrint(env: &mut Environment, arg: f64) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -601,6 +606,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(modf(_, _)),
     export_c_func!(modff(_, _)),
     export_c_func!(rint(_)),
+    export_c_func!(nearbyintf(_)),
     export_c_func!(lrint(_)),
     export_c_func!(lrintf(_)),
     // Rounding direction
@@ -619,3 +625,26 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(hypot(_, _)),
     export_c_func!(__fpclassifyf(_)),
 ];
+
+#[cfg(test)]
+pub(crate) fn minecraft_probe_nearbyintf_guest_abi(env: &mut Environment) {
+    use crate::abi::CallFromHost;
+    let f = env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, "_nearbyintf").unwrap();
+    let cases = [(0.5, 0.0, 0.0), (1.5, 2.0, 1.0), (2.5, 2.0, 2.0), (-0.5, -0.0, -0.0),
+                 (-1.5, -2.0, -1.0), (2.7, 3.0, 2.0), (-2.7, -3.0, -2.0),
+                 (8388609.0, 8388609.0, 8388609.0), (1e30, 1e30, 1e30)];
+    for (round, column) in [(FE_TONEAREST, 1), (FE_TOWARDZERO, 2)] {
+        assert_eq!(fesetround(env, round), 0);
+        for case in cases {
+            let (arg, expected) = (case.0, if column == 1 { case.1 } else { case.2 });
+            let r: f32 = f.call_from_host(env, (arg as f32,));
+            assert_eq!(r.to_bits(), (expected as f32).to_bits(), "nearbyintf({arg}) in {round:#x}");
+            assert_eq!(r.to_bits(), (rint(env, arg) as f32).to_bits());
+        }
+    }
+    assert_eq!(fesetround(env, FE_TONEAREST), 0);
+    let r: f32 = f.call_from_host(env, (f32::INFINITY,));
+    assert_eq!(r, f32::INFINITY);
+    let r: f32 = f.call_from_host(env, (f32::NAN,));
+    assert!(r.is_nan());
+}
