@@ -221,6 +221,11 @@ mod collections {
                 .map(|(&base, size)| Chunk::new(base, size.get()))
         }
 
+        #[cfg(test)]
+        pub fn iter(&self) -> impl Iterator<Item = Chunk> + '_ {
+            self.chunks.iter().map(|(&base, &size)| Chunk { base, size })
+        }
+
         /// Remove all chunks overlapping a provided Chunk. In the case
         /// of overlap the non overlapping portion is left
         pub fn remove_range(&mut self, remove: Chunk) {
@@ -402,6 +407,22 @@ mod collections {
                 .flat_map(|chunks| chunks.iter())
                 .copied()
         }
+
+        /// Every bucket entry is in the right bucket and in the address map,
+        /// and nothing else is in the map. Returns the chunks by address.
+        #[cfg(test)]
+        pub fn checked_chunks(&self) -> Vec<Chunk> {
+            let mut count = 0;
+            for (bucket, chunks) in self.chunks_by_log2_size.iter().enumerate() {
+                for chunk in chunks {
+                    assert_eq!(self.bucket_for(chunk.size.get()), bucket);
+                    assert_eq!(self.chunks.get_size_with_base(chunk.base), Some(chunk.size));
+                    count += 1;
+                }
+            }
+            assert_eq!(count, self.chunks.iter().count());
+            self.chunks.iter().collect()
+        }
     }
 }
 use collections::{ChunkMap, SizeBucketedChunkMap};
@@ -508,18 +529,22 @@ impl HeapAllocator {
             return 0;
         };
 
-        if let Some(adjacent) = self
-            .unused_chunks
-            .remove_with_base(freed.last_byte() + 1)
-            .or_else(|| self.unused_chunks.remove_with_end(freed.base))
-        {
-            let combined = adjacent.merge(freed);
-            self.unused_chunks.insert(combined);
-        } else {
-            self.unused_chunks.insert(freed);
-        }
+        self.insert_unused(freed);
 
         freed.size.get()
+    }
+
+    // Merge with both free neighbours, like VMAllocator::deallocate, so two
+    // free chunks are never left adjacent and unusable as one span.
+    fn insert_unused(&mut self, chunk: Chunk) {
+        let mut combined = chunk;
+        if let Some(adjacent) = self.unused_chunks.remove_with_base(chunk.last_byte() + 1) {
+            combined = combined.merge(adjacent);
+        }
+        if let Some(adjacent) = self.unused_chunks.remove_with_end(chunk.base) {
+            combined = combined.merge(adjacent);
+        }
+        self.unused_chunks.insert(combined);
     }
 
     /// Consume the allocator returning an iterator over the managed
@@ -535,7 +560,9 @@ impl HeapAllocator {
             .expect("Failed to allocate memory for heap.");
 
         self.backing_chunks.push(chunk);
-        self.unused_chunks.insert(chunk);
+        // The VM allocator can place this right next to an earlier backing
+        // chunk, so its free edge joins this one.
+        self.insert_unused(chunk);
     }
 }
 
@@ -657,5 +684,211 @@ impl VMAllocator {
         self.used_chunks.insert(alloc);
 
         Ok(alloc)
+    }
+}
+
+#[cfg(test)]
+mod heap_tests {
+    use super::*;
+
+    struct XorShift(u64);
+    impl XorShift {
+        fn next(&mut self) -> u64 { self.0 ^= self.0 << 13; self.0 ^= self.0 >> 7; self.0 ^= self.0 << 17; self.0 }
+        fn below(&mut self, n: u64) -> u64 { self.next() % n }
+    }
+
+    // Mostly small objects with a tail of buffers, roughly what the game's
+    // C++ containers and chunk meshes ask for.
+    fn churn_size(rng: &mut XorShift) -> GuestUSize {
+        match rng.below(100) {
+            0..=69 => 1 + rng.below(128) as GuestUSize,
+            70..=89 => 128 + rng.below(896) as GuestUSize,
+            90..=97 => 1024 + rng.below(14 * 1024) as GuestUSize,
+            _ => 16 * 1024 + rng.below(48 * 1024) as GuestUSize,
+        }
+    }
+
+    // Same order of operations as Mem::realloc_in_heap when growing.
+    fn realloc(heap: &mut HeapAllocator, vm: &mut VMAllocator, base: VAddr, size: GuestUSize) -> Chunk {
+        let new = heap.alloc(vm, size).unwrap();
+        let _ = heap.free(vm, base);
+        new
+    }
+
+    // Runs of address-contiguous backing chunks, which merges may span.
+    fn backing_runs(heap: &HeapAllocator) -> Vec<Chunk> {
+        let mut runs: Vec<Chunk> = Vec::new();
+        let mut backing = heap.backing_chunks.clone();
+        backing.sort_by_key(|chunk| chunk.base);
+        for chunk in backing {
+            match runs.last_mut() {
+                Some(run) if run.last_byte() + 1 == chunk.base => *run = run.merge(chunk),
+                _ => runs.push(chunk),
+            }
+        }
+        runs
+    }
+
+    // Free and used heap chunks tile the backing chunks exactly, no two free
+    // chunks touch, and the live set matches the reference model.
+    fn check_heap(heap: &HeapAllocator, live: &BTreeMap<VAddr, GuestUSize>) {
+        let free = heap.unused_chunks.checked_chunks();
+        for pair in free.windows(2) {
+            assert!(pair[0].last_byte() + 1 < pair[1].base, "adjacent free chunks {pair:?}");
+        }
+        let mut tiles: Vec<Chunk> = heap.used_chunks.iter().chain(free.iter().copied()).collect();
+        tiles.sort_by_key(|chunk| chunk.base);
+        for pair in tiles.windows(2) {
+            assert!(pair[0].last_byte() < pair[1].base, "overlap {pair:?}");
+        }
+        let runs = backing_runs(heap);
+        for tile in &tiles {
+            assert!(runs.iter().any(|run| run.contains(tile.base) && run.contains(tile.last_byte())));
+        }
+        let size_of = |chunks: &mut dyn Iterator<Item = &Chunk>| chunks.map(|c| u64::from(c.size.get())).sum::<u64>();
+        assert_eq!(size_of(&mut tiles.iter()), size_of(&mut heap.backing_chunks.iter()));
+
+        let external: Vec<Chunk> = heap.external_chunks.iter().collect();
+        for chunk in &external {
+            assert!(chunk.base.is_multiple_of(PAGE_SIZE));
+            assert!(!heap.backing_chunks.iter().any(|b| b.contains(chunk.base) || chunk.contains(b.base)));
+        }
+        let mut allocated: Vec<Chunk> = heap.used_chunks.iter().chain(external).collect();
+        allocated.sort_by_key(|chunk| chunk.base);
+        assert_eq!(allocated.len(), live.len());
+        for (chunk, (&base, &requested)) in allocated.iter().zip(live) {
+            assert_eq!(chunk.base, base);
+            assert!(base.is_multiple_of(MIN_CHUNK_SIZE) && chunk.size.get().is_multiple_of(MIN_CHUNK_SIZE));
+            assert!(chunk.size.get() >= requested.max(MIN_CHUNK_SIZE));
+        }
+    }
+
+    #[test]
+    fn heap_randomized_stress_against_model() {
+        let mut vm = VMAllocator::new(0x1000, 0xf000_0000);
+        let mut heap = HeapAllocator::new(&mut vm, HeapAllocator::HEAP_CHUNK_SIZE);
+        let mut rng = XorShift(0x2545_f491_4f6c_dd1d);
+        let mut live = BTreeMap::<VAddr, GuestUSize>::new();
+        let mut order = Vec::<VAddr>::new();
+        for step in 0..60_000u32 {
+            // Drift between growing and shrinking phases so merges of all
+            // shapes happen, including frees between two free chunks.
+            let grow = (step / 5_000) % 2 == 0;
+            match rng.below(10) {
+                0..=4 if grow || order.is_empty() => {
+                    let size = churn_size(&mut rng);
+                    let chunk = heap.alloc(&mut vm, size).unwrap();
+                    assert!(live.insert(chunk.base, size).is_none());
+                    order.push(chunk.base);
+                }
+                0..=7 if !order.is_empty() => {
+                    let base = order.swap_remove(rng.below(order.len() as u64) as usize);
+                    let size = live.remove(&base).unwrap();
+                    assert!(heap.free(&mut vm, base) >= size);
+                }
+                _ if !order.is_empty() => {
+                    let idx = rng.below(order.len() as u64) as usize;
+                    let size = live[&order[idx]] + churn_size(&mut rng);
+                    if heap.find_allocated_size(order[idx]) >= size {
+                        live.insert(order[idx], size);
+                    } else {
+                        let new = realloc(&mut heap, &mut vm, order[idx], size);
+                        live.remove(&order[idx]);
+                        assert!(live.insert(new.base, size).is_none());
+                        order[idx] = new.base;
+                    }
+                }
+                _ => {}
+            }
+            if step % 500 == 0 {
+                check_heap(&heap, &live);
+            }
+        }
+        check_heap(&heap, &live);
+
+        for base in order.drain(..) {
+            live.remove(&base);
+            let _ = heap.free(&mut vm, base);
+        }
+        check_heap(&heap, &live);
+        assert!(heap.external_chunks.iter().next().is_none());
+
+        // With everything freed, each run of contiguous backing chunks is one
+        // free chunk, and all of it can be handed out again without growing.
+        let runs = backing_runs(&heap);
+        assert_eq!(heap.unused_chunks.checked_chunks(), runs);
+        let largest = HeapAllocator::HEAP_ALLOCATION_THRESHOLD & !(MIN_CHUNK_SIZE - 1);
+        let fits: u32 = runs.iter().map(|run| run.size.get() / largest).sum();
+        let backing_count = heap.backing_chunks.len();
+        for _ in 0..fits {
+            let chunk = heap.alloc(&mut vm, largest).unwrap();
+            live.insert(chunk.base, largest);
+        }
+        assert_eq!(heap.backing_chunks.len(), backing_count);
+        check_heap(&heap, &live);
+    }
+
+    // grow() can be handed VM space directly above or below an existing
+    // backing chunk whose edge is free; the two must merge.
+    #[test]
+    fn heap_grow_merges_with_adjacent_backing_chunk() {
+        let size = HeapAllocator::HEAP_CHUNK_SIZE;
+        // Above: the next VM chunk follows the initial one.
+        let mut vm = VMAllocator::new(0x1000, 0xf000_0000);
+        let mut heap = HeapAllocator::new(&mut vm, PAGE_SIZE);
+        let mut live = BTreeMap::new();
+        live.insert(heap.alloc(&mut vm, PAGE_SIZE - 16).unwrap().base, PAGE_SIZE - 16);
+        let grown = heap.alloc(&mut vm, 32).unwrap();
+        live.insert(grown.base, 32);
+        assert_eq!(heap.backing_chunks[1].base, 0x2000);
+        assert_eq!(grown.base, 0x2000 - 16);
+        check_heap(&heap, &live);
+
+        // Below: a hole of exactly one heap chunk ends at the backing chunk,
+        // whose first bytes are free.
+        let mut vm = VMAllocator::new(0x1000, 0xf000_0000);
+        let hole = vm.allocate(None, size).unwrap();
+        let mut heap = HeapAllocator::new(&mut vm, PAGE_SIZE);
+        let head = heap.alloc(&mut vm, 16).unwrap();
+        let mut live = BTreeMap::new();
+        live.insert(heap.alloc(&mut vm, PAGE_SIZE - 16).unwrap().base, PAGE_SIZE - 16);
+        let _ = heap.free(&mut vm, head.base);
+        vm.deallocate(hole.base, size);
+        live.insert(heap.alloc(&mut vm, 32).unwrap().base, 32);
+        assert_eq!(heap.backing_chunks[1], hole);
+        check_heap(&heap, &live);
+        assert_eq!(heap.unused_chunks.checked_chunks(), vec![Chunk::new(hole.base + 32, size - 32 + 16)]);
+    }
+
+    // Run explicitly in release mode to time a malloc/free/realloc churn.
+    #[test]
+    #[ignore = "manual release benchmark"]
+    fn heap_churn_benchmark() {
+        use std::{hint::black_box, time::Instant};
+        let mut vm = VMAllocator::new(0x1000, 0xf000_0000);
+        let mut heap = HeapAllocator::new(&mut vm, HeapAllocator::HEAP_CHUNK_SIZE);
+        let mut rng = XorShift(0x9e37_79b9_7f4a_7c15);
+        let mut live: Vec<VAddr> = Vec::new();
+        for _ in 0..30_000 { live.push(heap.alloc(&mut vm, churn_size(&mut rng)).unwrap().base); }
+        const OPS: u32 = 2_000_000;
+        let start = Instant::now();
+        for _ in 0..OPS {
+            match rng.below(20) {
+                0..=8 => live.push(heap.alloc(&mut vm, churn_size(&mut rng)).unwrap().base),
+                9..=17 if !live.is_empty() => {
+                    let idx = rng.below(live.len() as u64) as usize;
+                    black_box(heap.free(&mut vm, live.swap_remove(idx)));
+                }
+                _ if !live.is_empty() => {
+                    let idx = rng.below(live.len() as u64) as usize;
+                    let size = heap.find_allocated_size(live[idx]) + churn_size(&mut rng);
+                    live[idx] = realloc(&mut heap, &mut vm, live[idx], size).base;
+                }
+                _ => {}
+            }
+        }
+        let elapsed = start.elapsed();
+        println!("heap churn: {OPS} ops in {elapsed:?} = {:.1} ns/op, {} live, {} backing chunks",
+            elapsed.as_nanos() as f64 / OPS as f64, live.len(), heap.backing_chunks.len());
     }
 }
