@@ -40,19 +40,35 @@ pub const EOVERFLOW: i32 = 84;
 
 #[derive(Default)]
 pub struct State {
-    errnos: std::collections::HashMap<crate::ThreadId, MutPtr<i32>>,
+    // Indexed by ThreadId, which is never reused. None until the thread first
+    // touches errno, so storage is still allocated lazily.
+    errnos: Vec<Option<MutPtr<i32>>>,
     strings_cache: std::collections::HashMap<i32, ConstPtr<u8>>,
 }
 impl State {
+    #[inline]
+    fn get(&self, thread: crate::ThreadId) -> Option<MutPtr<i32>> {
+        self.errnos.get(thread).copied().flatten()
+    }
+
+    fn insert(&mut self, thread: crate::ThreadId, ptr: MutPtr<i32>) {
+        if self.errnos.len() <= thread {
+            self.errnos.resize(thread + 1, None);
+        }
+        self.errnos[thread] = Some(ptr);
+    }
+
     fn errno_ptr_for_thread(
         &mut self,
         mem: &mut crate::mem::Mem,
         thread: crate::ThreadId,
     ) -> MutPtr<i32> {
-        *self
-            .errnos
-            .entry(thread)
-            .or_insert_with(|| mem.alloc_and_write(0i32))
+        if let Some(ptr) = self.get(thread) {
+            return ptr;
+        }
+        let ptr = mem.alloc_and_write(0i32);
+        self.insert(thread, ptr);
+        ptr
     }
 
     pub fn set_errno_for_thread(
@@ -146,7 +162,31 @@ pub const FUNCTIONS: FunctionExports = &[
 /// Prepare errno storage before native C entry, without changing an existing
 /// value. Callbacks never create guest thread storage while inside C.
 pub(crate) fn try_errno_ptr(env:&mut Environment)->Option<MutPtr<i32>> {
-    if let Some(p)=env.libc_state.errno.errnos.get(&env.current_thread){return Some(*p)}
+    if let Some(p)=env.libc_state.errno.get(env.current_thread){return Some(p)}
     let p=env.mem.try_alloc(4)?.cast::<i32>();env.mem.write(p,0i32);
-    env.libc_state.errno.errnos.insert(env.current_thread,p);Some(p)
+    env.libc_state.errno.insert(env.current_thread,p);Some(p)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn errno_storage_is_lazy_per_thread_and_stable() {
+        let mut mem = crate::mem::Mem::new();
+        let mut state = State::default();
+        let before = mem.alloc(16);
+        state.set_errno_for_thread(&mut mem, 3, EINVAL);
+        let three = state.get(3).unwrap();
+        assert!(state.get(0).is_none() && state.get(1).is_none() && state.get(7).is_none());
+        // Allocated on first use, right after the earlier allocation.
+        assert_eq!(three.to_bits(), before.to_bits() + 16);
+        assert_eq!(mem.read(three), EINVAL);
+        state.set_errno_for_thread(&mut mem, 0, ENOENT);
+        state.set_errno_for_thread(&mut mem, 3, 0);
+        assert_eq!(state.errno_ptr_for_thread(&mut mem, 3), three);
+        assert_eq!(mem.read(three), 0);
+        assert_eq!(mem.read(state.get(0).unwrap()), ENOENT);
+        assert_ne!(state.get(0), Some(three));
+    }
 }

@@ -5,10 +5,10 @@
  */
 //! Internal mutex interface.
 
-use std::collections::HashMap;
 use std::num::NonZeroU32;
 
 use super::{Environment, ThreadId};
+use crate::fx_hash::FxHashMap;
 use crate::libc::errno::{EBUSY, EDEADLK, EPERM};
 
 /// Stores and manages mutexes. Note that all the methods for locking and
@@ -20,7 +20,7 @@ pub struct MutexState {
     // many mutexes over the lifetime of an application, but it would perform
     // better. Maybe it could also be a fixed size allocator? (although that
     // seems a little overkill)
-    mutexes: HashMap<MutexId, Mutex>,
+    mutexes: FxHashMap<MutexId, Mutex>,
     // Hopefully there will never be more than 2^64 mutexes in an application's
     // lifetime :P
     mutex_count: u64,

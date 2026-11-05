@@ -21,6 +21,22 @@ pub fn get_log_file() -> &'static File {
     &LOG_FILE
 }
 
+/// Formats a log line with its trailing newline. Only for use by [echo]!
+pub fn line(args: std::fmt::Arguments) -> String {
+    let mut line = std::fmt::format(args);
+    line.push('\n');
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn line_is_formatted_once_with_newline() {
+        assert_eq!(super::line(format_args!("{}: {}", "touchHLE::mem", format_args!("{:#x}", 16))), "touchHLE::mem: 0x10\n");
+        assert_eq!(super::line(format_args!("")), "\n");
+    }
+}
+
 /// Prints a log message unconditionally. Use this for errors or warnings.
 ///
 /// The message is prefixed with the module path, so it is clear where it comes
@@ -69,19 +85,18 @@ macro_rules! log_once {
 macro_rules! echo {
     ($($arg:tt)+) => {
         {
-            let formatted_str = format!($($arg)+);
+            // Build the whole line once so each sink gets a single write.
+            let line = $crate::log::line(format_args!($($arg)+));
 
             #[cfg(target_os = "android")]
             {
-                sdl2::log::log(&formatted_str);
+                sdl2::log::log(&line[..line.len() - 1]);
             }
             #[cfg(not(target_os = "android"))]
-            let _ = std::io::Write::write_fmt(&mut std::io::stderr().lock(), format_args!("{}\n", formatted_str));
+            let _ = std::io::Write::write_all(&mut std::io::stderr().lock(), line.as_bytes());
 
             use std::io::Write;
-            let mut log_file = $crate::log::get_log_file();
-            let _ = log_file.write_all(formatted_str.as_bytes());
-            let _ = log_file.write_all(b"\n");
+            let _ = $crate::log::get_log_file().write_all(line.as_bytes());
         }
     };
     () => {

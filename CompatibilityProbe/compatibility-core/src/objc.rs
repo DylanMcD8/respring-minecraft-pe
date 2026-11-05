@@ -21,6 +21,7 @@
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant, HostDylib};
 use crate::objc::messages::ThreadInitializer;
 use crate::MutexId;
+use crate::fx_hash::FxHashMap;
 use std::collections::HashMap;
 
 mod classes;
@@ -74,7 +75,7 @@ pub struct ObjC {
     /// Mapping of known (guest) object pointers to their host objects.
     ///
     /// If an object isn't in this map, we will consider it not to exist.
-    objects: HashMap<id, HostObjectEntry>,
+    objects: FxHashMap<id, HostObjectEntry>,
 
     /// Known classes.
     ///
@@ -98,7 +99,7 @@ impl ObjC {
         ObjC {
             blocks: Default::default(),
             selectors: HashMap::new(),
-            objects: HashMap::new(),
+            objects: Default::default(),
             classes: HashMap::new(),
             sync_mutexes: HashMap::new(),
             initializer_threads: HashMap::new(),

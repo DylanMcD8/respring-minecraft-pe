@@ -265,6 +265,11 @@ mod minecraft_probe_tests {
         Environment::new_without_app(options, icon).unwrap().run_app_picker(|env| {
             crate::libc::pthread::cond::minecraft_probe_fixture(env);
             crate::libc::compiler_rt::minecraft_probe_signed_64bit_remainder_guest_abi(env);
+            crate::libc::compiler_rt::minecraft_probe_zero_divisor_guest_abi(env);
+            crate::libc::math::minecraft_probe_nearbyintf_guest_abi(env);
+            crate::libc::stdlib::minecraft_probe_free_resets_errno(env);
+            crate::libc::posix_io::minecraft_probe_close_and_sync(env);
+            crate::libc::pthread::key::minecraft_probe_thread_specific(env);
             crate::libc::stdio::minecraft_probe_fread_short_eof(env);
             let sendto = env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, "_sendto").unwrap();
             let error = env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, "___error").unwrap();

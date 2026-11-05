@@ -80,6 +80,14 @@ fn reallocf(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoid
 }
 
 fn free(env: &mut Environment, ptr: MutVoidPtr) {
+    // TODO: handle errno properly
+    if ptr.is_null() {
+        // "If ptr is a NULL pointer, no operation is performed."
+        // NULL is never a registered object, so skipping that lookup is safe.
+        set_errno(env, 0);
+        return;
+    }
+
     // We need to catch situations of freeing NSObjects early!
     if env.objc.get_host_object(ptr.cast()).is_some() {
         log!(
@@ -90,13 +98,7 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
         return;
     }
 
-    // TODO: handle errno properly
     set_errno(env, 0);
-
-    if ptr.is_null() {
-        // "If ptr is a NULL pointer, no operation is performed."
-        return;
-    }
     env.mem.free(ptr);
 }
 
@@ -1019,4 +1021,16 @@ where
         return Err(());
     };
     Ok((res, whitespace_len + len))
+}
+
+#[cfg(test)]
+pub(crate) fn minecraft_probe_free_resets_errno(env: &mut Environment) {
+    let errno = crate::libc::errno::try_errno_ptr(env).unwrap();
+    set_errno(env, EINVAL);
+    free(env, Ptr::null());
+    assert_eq!(env.mem.read(errno), 0);
+    let ptr = malloc(env, 24);
+    set_errno(env, ERANGE);
+    free(env, ptr);
+    assert_eq!(env.mem.read(errno), 0);
 }

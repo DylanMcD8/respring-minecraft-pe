@@ -11,7 +11,8 @@ use crate::libc::errno::{EINVAL, ETIMEDOUT};
 use crate::libc::pthread::mutex::pthread_mutex_unlock;
 use crate::mem::{ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::{export_c_func, Environment};
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::fx_hash::FxHashMap;
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 
 use crate::environment::{MutexId, ThreadBlock, ThreadId};
@@ -53,7 +54,7 @@ unsafe impl SafeRead for pthread_cond_t {}
 
 #[derive(Default)]
 pub struct State {
-    pub condition_variables: HashMap<MutPtr<pthread_cond_t>, CondHostObject>,
+    pub condition_variables: FxHashMap<MutPtr<pthread_cond_t>, CondHostObject>,
 }
 impl State {
     fn get(env: &Environment) -> &Self {

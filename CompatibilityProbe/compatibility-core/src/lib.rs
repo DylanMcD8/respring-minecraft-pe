@@ -37,6 +37,7 @@ mod environment;
 mod font;
 mod frameworks;
 mod fs;
+mod fx_hash;
 mod gdb;
 mod gles;
 mod image;

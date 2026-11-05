@@ -17,6 +17,7 @@ use super::{
 use crate::libc::string::strdup;
 use crate::mach_o::MachO;
 use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, Ptr, SafeRead};
+use crate::fx_hash::FxHashMap;
 use crate::Environment;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
@@ -38,7 +39,7 @@ pub(super) struct ClassHostObject {
     pub(super) name: String,
     pub(super) is_metaclass: bool,
     pub(super) superclass: Class,
-    pub(super) methods: HashMap<SEL, IMP>,
+    pub(super) methods: FxHashMap<SEL, IMP>,
     pub(super) guest_method_signatures: HashMap<SEL, ConstPtr<u8>>,
     protocols: Vec<ConstVoidPtr>,
     host_protocols: &'static [&'static str],
@@ -391,7 +392,7 @@ impl ClassHostObject {
             name: template.name.to_string(),
             is_metaclass,
             superclass,
-            methods: HashMap::from_iter(
+            methods: FxHashMap::from_iter(
                 (if is_metaclass {
                     template.class_methods
                 } else {
@@ -441,7 +442,7 @@ impl ClassHostObject {
             name,
             is_metaclass,
             superclass,
-            methods: HashMap::new(),
+            methods: Default::default(),
             guest_method_signatures: HashMap::new(),
             protocols: read_protocol_list(mem, _base_protocols),
             host_protocols: &[],
