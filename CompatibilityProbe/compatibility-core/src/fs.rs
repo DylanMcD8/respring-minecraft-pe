@@ -400,14 +400,28 @@ impl GuestFile {
         GuestFile::Directory
     }
 
-    pub fn sync_all(&self) -> std::io::Result<()> {
+    /// `full` is `fcntl(F_FULLFSYNC)`, which [File::sync_all] maps to on Apple
+    /// hosts and which waits for the drive's cache; otherwise this is a plain
+    /// `fsync()`, like the guest asked for.
+    pub fn sync(&self, full: bool) -> std::io::Result<()> {
         match self {
+            GuestFile::File(file) if full => file.sync_all(),
+            #[cfg(unix)]
+            GuestFile::File(file) => loop {
+                use std::os::fd::AsRawFd;
+                if unsafe { libc::fsync(file.as_raw_fd()) } == 0 {
+                    break Ok(());
+                }
+                // Retry EINTR like std's sync_all does.
+                let error = std::io::Error::last_os_error();
+                if error.kind() != std::io::ErrorKind::Interrupted {
+                    break Err(error);
+                }
+            },
+            #[cfg(not(unix))]
             GuestFile::File(file) => file.sync_all(),
-            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Ok(()),
-            GuestFile::Directory => {
-                log!("Warning: syncing directory as a guest file.");
-                Ok(())
-            }
+            // Directories have nothing buffered on our side.
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) | GuestFile::Directory => Ok(()),
             GuestFile::Socket => Err(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "Sync operation not supported on socket",

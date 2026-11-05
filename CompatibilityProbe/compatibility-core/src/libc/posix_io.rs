@@ -46,7 +46,6 @@ impl State {
 struct PosixFileHostObject {
     progress_writer: bool,
     file: GuestFile,
-    needs_flush: bool,
     reached_eof: bool,
     flags: i32,
 }
@@ -58,7 +57,7 @@ pub(super) fn minecraft_probe_read_file(env:&mut Environment, data:&[u8])->FileD
     std::fs::remove_file(&path).unwrap(); // Unlinked test file lives until close.
     file.write_all(data).unwrap();
     file.seek(std::io::SeekFrom::Start(0)).unwrap();
-    find_or_create_fd(env,PosixFileHostObject {progress_writer:false,file:GuestFile::File(file),needs_flush:false,reached_eof:false,flags:0})
+    find_or_create_fd(env,PosixFileHostObject {progress_writer:false,file:GuestFile::File(file),reached_eof:false,flags:0})
 }
 
 // TODO: stdin/stdout/stderr handling somehow
@@ -104,6 +103,7 @@ const F_GETLK: FileControlCommand = 7;
 const F_SETLK: FileControlCommand = 8;
 const F_RDADVISE: FileControlCommand = 44;
 const F_NOCACHE: FileControlCommand = 48;
+const F_FULLFSYNC: FileControlCommand = 51;
 
 /// File Descriptor flags.
 /// This alias is for readability, POSIX just uses `int`.
@@ -227,7 +227,6 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
             let host_object = PosixFileHostObject {
                 progress_writer: needs_flush && (path_string.contains("userdata/") || path_string.contains("Preferences/")),
                 file,
-                needs_flush,
                 reached_eof: false,
                 flags: 0,
             };
@@ -641,20 +640,9 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
                     close_socket(env, fd);
                     0
                 }
-                // Files must be synced if they require flushing
-                _ => {
-                    if !file.needs_flush {
-                        0
-                    } else {
-                        match file.file.sync_all() {
-                            Ok(()) => 0,
-                            Err(_) => {
-                                // TODO: set errno
-                                -1
-                            }
-                        }
-                    }
-                }
+                // Writes go straight to the host file, so like POSIX close()
+                // there is nothing to sync; the guest calls fsync() for that.
+                _ => 0,
             }
         }
         None => {
@@ -861,6 +849,7 @@ fn fcntl(
         F_RDADVISE => {
             log_dbg!("TODO: Ignoring F_RDADVISE for file descriptor {}", fd);
         }
+        F_FULLFSYNC => return sync_fd(env, fd, true),
         _ => unimplemented!(),
     }
     0 // success
@@ -875,23 +864,29 @@ fn flock(env: &mut Environment, fd: FileDescriptor, operation: FLockFlag) -> i32
 }
 
 pub fn fsync(env: &mut Environment, fd: FileDescriptor) -> i32 {
+    sync_fd(env, fd, false)
+}
+
+// Shared by fsync() and fcntl(F_FULLFSYNC), which sets `full`.
+fn sync_fd(env: &mut Environment, fd: FileDescriptor, full: bool) -> i32 {
+    let call = || if full { format!("fcntl({fd:?}, F_FULLFSYNC)") } else { format!("fsync({fd:?})") };
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         log!(
-            "Warning: fsync({:?}) called with unknown fd, returning -1",
-            fd,
+            "Warning: {} called with unknown fd, returning -1",
+            call(),
         );
         set_errno(env, EBADF);
         return -1;
     };
 
-    match file.file.sync_all() {
+    match file.file.sync(full) {
         Ok(()) => 0,
         Err(error) => {
             match error.kind() {
                 std::io::ErrorKind::PermissionDenied => {
                     log!(
-                        "Warning: fsync({:?}) sync failed with error: {:?}, returning 0 to match expected behavior",
-                        fd,
+                        "Warning: {} sync failed with error: {:?}, returning 0 to match expected behavior",
+                        call(),
                         error
                     );
                     return 0;
@@ -902,8 +897,8 @@ pub fn fsync(env: &mut Environment, fd: FileDescriptor) -> i32 {
             }
 
             log!(
-                "Warning: fsync({:?}) sync failed with error: {:?}, returning -1",
-                fd,
+                "Warning: {} sync failed with error: {:?}, returning -1",
+                call(),
                 error
             );
             -1
@@ -990,7 +985,6 @@ pub fn find_or_create_socket(env: &mut Environment) -> FileDescriptor {
     let host_object = PosixFileHostObject {
         progress_writer: false,
         file: GuestFile::Socket,
-        needs_flush: false,
         reached_eof: false,
         flags: 0,
     };
@@ -1045,3 +1039,39 @@ fn validate_lock(env: &mut Environment, fd: FileDescriptor, lock: &flock) -> Res
 }
 
 pub(crate) fn progress_writer_open(env:&Environment)->bool{env.libc_state.posix_io.progress_writer_open()}
+
+#[cfg(test)]
+pub(crate) fn minecraft_probe_close_and_sync(env: &mut Environment) {
+    use crate::abi::CallFromHost;
+    let path = std::env::temp_dir().join(format!("respring-sync-{}", std::process::id()));
+    let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(true).open(&path).unwrap();
+    let fd = find_or_create_fd(env, PosixFileHostObject {progress_writer:false,file:GuestFile::File(file),reached_eof:false,flags:0});
+    let data = env.mem.alloc_and_write_cstr(b"level.dat");
+    assert_eq!(write(env, fd, data.cast_const().cast(), 9), 9);
+    assert_eq!(fsync(env, fd), 0);
+    let fcntl = env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, "_fcntl").unwrap();
+    let result: i32 = fcntl.call_from_host(env, (fd, F_FULLFSYNC));
+    assert_eq!(result, 0);
+    assert_eq!(close(env, fd), 0);
+    assert_eq!(std::fs::read(&path).unwrap(), b"level.dat");
+    std::fs::remove_file(&path).unwrap();
+
+    let error = env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, "___error").unwrap();
+    let errno: MutPtr<i32> = error.call_from_host(env, ());
+    assert_eq!(fsync(env, fd), -1);
+    assert_eq!(env.mem.read(errno), EBADF);
+    let result: i32 = fcntl.call_from_host(env, (fd, F_FULLFSYNC));
+    assert_eq!(result, -1);
+    assert_eq!(env.mem.read(errno), EBADF);
+    assert_eq!(close(env, fd), -1);
+    assert!(GuestFile::Directory.sync(false).is_ok() && GuestFile::Directory.sync(true).is_ok());
+
+    // Sockets can't be synced either way.
+    let socket = find_or_create_socket(env);
+    assert_eq!(fsync(env, socket), -1);
+    assert_eq!(env.mem.read(errno), EINVAL);
+    let result: i32 = fcntl.call_from_host(env, (socket, F_FULLFSYNC));
+    assert_eq!(result, -1);
+    assert_eq!(env.mem.read(errno), EINVAL);
+    assert_eq!(close(env, socket), 0);
+}
