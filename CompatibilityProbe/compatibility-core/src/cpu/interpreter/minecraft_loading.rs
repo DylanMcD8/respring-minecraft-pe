@@ -109,6 +109,12 @@ pub(super) const BLOCKS:&[(u32,u32,u64,&[u8])]=&[
 (683270,683280,4,&[32,70,7,176,189,232,0,5,240,189]),
 (711498,711578,31,&[1,45,16,209,219,248,48,18,0,37,136,66,28,191,219,248,120,16,136,66,23,208,219,248,40,19,136,66,28,191,219,248,240,17,136,66,15,208,144,248,68,0,79,246,158,33,0,37,192,242,29,1,121,68,8,68,144,248,216,0,0,40,8,191,1,37,0,224,0,37,40,70,10,176,189,232,0,13,240,189]),
 (1031052,1031148,34,&[146,248,236,0,217,28,0,40,24,70,4,191,8,70,11,70,217,248,12,16,136,66,128,242,177,128,19,147,21,146,79,246,250,35,192,242,24,3,123,68,211,248,40,40,211,248,44,24,138,66,21,210,82,177,70,242,168,49,192,242,17,1,21,155,121,68,17,248,10,16,19,96,144,128,145,113,79,246,200,33,2,241,8,0,192,242,24,1,121,68,193,248,40,8,141,224]),
+(235932,236316,145,&[240,181,3,175,45,233,0,13,173,241,16,4,36,240,15,4,165,70,4,249,239,138,132,176,4,70,33,239,17,145,212,248,188,0,38,70,240,238,96,138,176,238,64,138,1,48,196,248,188,0,86,248,24,95,48,106,168,70,176,179,148,248,52,16,168,70,72,67,33,106,73,27,129,66,44,210,226,105,0,40,162,235,5,8,7,208,3,144,246,241,166,233,212,248,24,176,226,105,1,70,2,224,3,144,0,33,171,70,162,235,11,2,205,248,8,128,138,70,168,235,2,0,1,235,0,8,89,70,64,70,246,241,74,234,2,153,88,70,196,248,24,128,0,40,10,235,1,2,3,153,226,97,81,68,33,98,3,208,246,241,128,233,214,248,0,128,0,32,160,99,212,248,184,48,224,105,148,248,52,32,4,241,48,10,1,51,160,235,8,1,90,67,138,66,6,217,81,26,48,70,105,241,180,254,214,248,0,128,6,224,138,66,4,210,8,235,2,1,136,66,24,191,225,97,96,104,88,177,69,69,9,209,97,105,11,121,193,24,97,96,160,104,0,40,47,208,0,235,3,9,46,224,212,248,184,16,148,248,52,96,148,248,48,32,148,248,50,0,6,251,1,243,6,251,1,33,255,40,65,68,3,208,24,68,8,235,0,9,1,224,79,240,0,9,148,248,51,32,255,42,2,208,26,68,66,68,0,224,0,34,148,248,49,96,255,46,2,208,51,68,67,68,0,224,0,35,4,241,12,0,97,96,196,248,8,144,128,232,12,4,17,224,79,240,0,9,196,248,8,144,226,104,0,42,1,208,26,68,0,224,0,34,226,96,38,105,0,46,1,208,51,68,0,224,0,35,35,97,148,248,112,96,222,177]),
+(236136,236316,71,&[214,248,0,128,6,224,138,66,4,210,8,235,2,1,136,66,24,191,225,97,96,104,88,177,69,69,9,209,97,105,11,121,193,24,97,96,160,104,0,40,47,208,0,235,3,9,46,224,212,248,184,16,148,248,52,96,148,248,48,32,148,248,50,0,6,251,1,243,6,251,1,33,255,40,65,68,3,208,24,68,8,235,0,9,1,224,79,240,0,9,148,248,51,32,255,42,2,208,26,68,66,68,0,224,0,34,148,248,49,96,255,46,2,208,51,68,67,68,0,224,0,35,4,241,12,0,97,96,196,248,8,144,128,232,12,4,17,224,79,240,0,9,196,248,8,144,226,104,0,42,1,208,26,68,0,224,0,34,226,96,38,105,0,46,1,208,51,68,0,224,0,35,35,97,148,248,112,96,222,177]),
+(236474,236492,6,&[4,172,36,249,239,138,167,241,24,4,165,70,189,232,0,13,240,189]),
+(1718224,1718312,35,&[240,181,3,175,45,233,0,13,4,70,13,70,97,104,162,104,80,26,168,66,31,210,32,104,9,26,78,25,182,241,255,63,4,220,32,70,140,240,12,234,32,104,162,104,17,26,111,240,64,66,145,66,27,210,79,234,65,10,178,69,56,191,178,70,97,104,186,241,0,15,161,235,0,6,20,209,79,240,0,10,79,240,0,11,19,224,0,32]),
+(1718332,1718334,1,&[46,224]),
+(1718428,1718434,2,&[189,232,0,13,240,189]),
 ];
 fn block_0<A:LoadingAccess>(m:&mut Machine<A>)->Option<()> {  loop {match m.c.regs[15] {
 326448=>{
@@ -10677,8 +10683,1008 @@ m.c.regs[15]=1031146; m.retired+=1;
 m.c.regs[15]=1031432; continue;
 },
 _=>return Some(()), } } }
-pub(super) fn entry_index(pc:u32)->Option<usize>{match pc{326448=>Some(0),327178=>Some(1),1656628=>Some(2),1656692=>Some(3),1656798=>Some(4),295752=>Some(5),296034=>Some(6),1101488=>Some(7),457812=>Some(8),1457028=>Some(9),1461410=>Some(10),113976=>Some(11),783072=>Some(12),1456910=>Some(13),1461360=>Some(14),1101650=>Some(15),1101738=>Some(16),1102384=>Some(17),321362=>Some(18),154372=>Some(19),154474=>Some(20),1101876=>Some(21),1101950=>Some(22),1102034=>Some(23),1102056=>Some(24),1102162=>Some(25),1102182=>Some(26),1102336=>Some(27),1102444=>Some(28),457636=>Some(29),457708=>Some(30),457878=>Some(31),457958=>Some(32),879614=>Some(33),879670=>Some(34),879562=>Some(35),879762=>Some(36),891966=>Some(37),892098=>Some(38),1656972=>Some(39),296234=>Some(40),296272=>Some(41),296310=>Some(42),783266=>Some(43),783346=>Some(44),783214=>Some(45),629868=>Some(46),629892=>Some(47),1868652=>Some(48),1868682=>Some(49),1868818=>Some(50),1801400=>Some(51),1801466=>Some(52),1030506=>Some(53),1030526=>Some(54),1030734=>Some(55),628276=>Some(56),628354=>Some(57),596608=>Some(58),596628=>Some(59),596652=>Some(60),1031432=>Some(61),1232896=>Some(62),1233796=>Some(63),1234706=>Some(64),1801454=>Some(65),710966=>Some(66),711066=>Some(67),1118838=>Some(68),1118920=>Some(69),682970=>Some(70),683006=>Some(71),1058958=>Some(72),1059008=>Some(73),1059270=>Some(74),1059392=>Some(75),1059446=>Some(76),2013284=>Some(77),235652=>Some(78),235846=>Some(79),149636=>Some(80),149698=>Some(81),935780=>Some(82),935870=>Some(83),935928=>Some(84),935982=>Some(85),936040=>Some(86),936096=>Some(87),1656982=>Some(88),628196=>Some(89),236372=>Some(90),682960=>Some(91),683118=>Some(92),683270=>Some(93),711498=>Some(94),1031052=>Some(95),_=>None}}
-pub(super) fn execute<A:LoadingAccess>(index:usize,m:&mut Machine<A>)->Option<()>{match index{0=>block_0(m),1=>block_1(m),2=>block_2(m),3=>block_3(m),4=>block_4(m),5=>block_5(m),6=>block_6(m),7=>block_7(m),8=>block_8(m),9=>block_9(m),10=>block_10(m),11=>block_11(m),12=>block_12(m),13=>block_13(m),14=>block_14(m),15=>block_15(m),16=>block_16(m),17=>block_17(m),18=>block_18(m),19=>block_19(m),20=>block_20(m),21=>block_21(m),22=>block_22(m),23=>block_23(m),24=>block_24(m),25=>block_25(m),26=>block_26(m),27=>block_27(m),28=>block_28(m),29=>block_29(m),30=>block_30(m),31=>block_31(m),32=>block_32(m),33=>block_33(m),34=>block_34(m),35=>block_35(m),36=>block_36(m),37=>block_37(m),38=>block_38(m),39=>block_39(m),40=>block_40(m),41=>block_41(m),42=>block_42(m),43=>block_43(m),44=>block_44(m),45=>block_45(m),46=>block_46(m),47=>block_47(m),48=>block_48(m),49=>block_49(m),50=>block_50(m),51=>block_51(m),52=>block_52(m),53=>block_53(m),54=>block_54(m),55=>block_55(m),56=>block_56(m),57=>block_57(m),58=>block_58(m),59=>block_59(m),60=>block_60(m),61=>block_61(m),62=>block_62(m),63=>block_63(m),64=>block_64(m),65=>block_65(m),66=>block_66(m),67=>block_67(m),68=>block_68(m),69=>block_69(m),70=>block_70(m),71=>block_71(m),72=>block_72(m),73=>block_73(m),74=>block_74(m),75=>block_75(m),76=>block_76(m),77=>block_77(m),78=>block_78(m),79=>block_79(m),80=>block_80(m),81=>block_81(m),82=>block_82(m),83=>block_83(m),84=>block_84(m),85=>block_85(m),86=>block_86(m),87=>block_87(m),88=>block_88(m),89=>block_89(m),90=>block_90(m),91=>block_91(m),92=>block_92(m),93=>block_93(m),94=>block_94(m),95=>block_95(m),_=>None}}
+fn block_96<A:LoadingAccess>(m:&mut Machine<A>)->Option<()> {  loop {match m.c.regs[15] {
+235932=>{
+// 0003999c: push {r4, r5, r6, r7, lr}
+m.c.regs[15]=235932; m.retired+=1;
+let addr=m.c.regs[13].wrapping_sub(20); m.a.push_words(addr,&[m.c.regs[4],m.c.regs[5],m.c.regs[6],m.c.regs[7],m.c.regs[14]])?; m.c.regs[13]=addr;
+// 0003999e: add r7, sp, #0xc
+m.c.regs[15]=235934; m.retired+=1;
+let a=m.c.regs[13]; let b=12u32; m.c.regs[7]=a.wrapping_add(b);
+// 000399a0: push.w {r8, r10, r11}
+m.c.regs[15]=235936; m.retired+=1;
+let addr=m.c.regs[13].wrapping_sub(12); m.a.push_words(addr,&[m.c.regs[8],m.c.regs[10],m.c.regs[11]])?; m.c.regs[13]=addr;
+// 000399a4: sub.w r4, sp, #0x10
+m.c.regs[15]=235940; m.retired+=1;
+let a=m.c.regs[13]; let b=16u32; m.c.regs[4]=a.wrapping_sub(b);
+// 000399a8: bic r4, r4, #0xf
+m.c.regs[15]=235944; m.retired+=1;
+m.c.regs[4]=m.c.regs[4]&!15u32;
+// 000399ac: mov sp, r4
+m.c.regs[15]=235948; m.retired+=1;
+m.c.regs[13]=m.c.regs[4];
+// 000399ae: vst1.64 {d8, d9}, [r4:128]
+m.c.regs[15]=235950; m.retired+=1;
+m.a.push_words(m.c.regs[4],&[m.c.extregs[16],m.c.extregs[17],m.c.extregs[18],m.c.extregs[19]])?;
+// 000399b2: sub sp, #0x10
+m.c.regs[15]=235954; m.retired+=1;
+let a=m.c.regs[13]; let b=16u32; m.c.regs[13]=a.wrapping_sub(b);
+// 000399b4: mov r4, r0
+m.c.regs[15]=235956; m.retired+=1;
+m.c.regs[4]=m.c.regs[0];
+// 000399b6: vorr d9, d1, d1
+m.c.regs[15]=235958; m.retired+=1;
+let lane0=m.c.extregs[2]|m.c.extregs[2];let lane1=m.c.extregs[3]|m.c.extregs[3];m.c.extregs[18]=lane0;m.c.extregs[19]=lane1;
+// 000399ba: ldr.w r0, [r4, #0xbc]
+m.c.regs[15]=235962; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(188u32),4)?;
+// 000399be: mov r6, r4
+m.c.regs[15]=235966; m.retired+=1;
+m.c.regs[6]=m.c.regs[4];
+// 000399c0: vmov.f32 s17, s1
+m.c.regs[15]=235968; m.retired+=1;
+m.c.extregs[17]=m.c.extregs[1];
+// 000399c4: vmov.f32 s16, s0
+m.c.regs[15]=235972; m.retired+=1;
+m.c.extregs[16]=m.c.extregs[0];
+// 000399c8: adds r0, #0x1
+m.c.regs[15]=235976; m.retired+=1;
+let a=m.c.regs[0]; let b=1u32; m.add_flags(a,b); m.c.regs[0]=a.wrapping_add(b);
+// 000399ca: str.w r0, [r4, #0xbc]
+m.c.regs[15]=235978; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(188u32),4,m.c.regs[0])?;
+// 000399ce: ldr r5, [r6, #24]!
+m.c.regs[15]=235982; m.retired+=1;
+let addr=m.c.regs[6].wrapping_add(24u32);m.c.regs[5]=m.a.read(addr,4)?;m.c.regs[6]=addr;
+// 000399d2: ldr r0, [r6, #0x20]
+m.c.regs[15]=235986; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[6].wrapping_add(32u32),4)?;
+// 000399d4: mov r8, r5
+m.c.regs[15]=235988; m.retired+=1;
+m.c.regs[8]=m.c.regs[5];
+// 000399d6: cbz r0, 0x39a46
+m.c.regs[15]=235990; m.retired+=1;
+if m.c.regs[0]==0 {m.c.regs[15]=236102; continue;}
+m.c.regs[15]=235992;
+},
+235992=>{
+// 000399d8: ldrb.w r1, [r4, #0x34]
+m.c.regs[15]=235992; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(52u32),1)?;
+// 000399dc: mov r8, r5
+m.c.regs[15]=235996; m.retired+=1;
+m.c.regs[8]=m.c.regs[5];
+// 000399de: muls r0, r1, r0
+m.c.regs[15]=235998; m.retired+=1;
+m.c.regs[0]=m.c.regs[1].wrapping_mul(m.c.regs[0]);m.nz(m.c.regs[0]);
+// 000399e0: ldr r1, [r4, #0x20]
+m.c.regs[15]=236000; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(32u32),4)?;
+// 000399e2: subs r1, r1, r5
+m.c.regs[15]=236002; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[5]; m.sub_flags(a,b); m.c.regs[1]=a.wrapping_sub(b);
+// 000399e4: cmp r1, r0
+m.c.regs[15]=236004; m.retired+=1;
+m.cmp(m.c.regs[1],m.c.regs[0]);
+// 000399e6: bhs 0x39a42
+m.c.regs[15]=236006; m.retired+=1;
+if m.cond("hs") {m.c.regs[15]=236098; continue;}
+m.c.regs[15]=236008;
+},
+236008=>{
+// 000399e8: ldr r2, [r4, #0x1c]
+m.c.regs[15]=236008; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(28u32),4)?;
+// 000399ea: cmp r0, #0x0
+m.c.regs[15]=236010; m.retired+=1;
+m.cmp(m.c.regs[0],0u32);
+// 000399ec: sub.w r8, r2, r5
+m.c.regs[15]=236012; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[5]; m.c.regs[8]=a.wrapping_sub(b);
+// 000399f0: beq 0x39a02
+m.c.regs[15]=236016; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236034; continue;}
+m.c.regs[15]=236018;
+},
+236018=>{
+// 000399f2: str r0, [sp, #0xc]
+m.c.regs[15]=236018; m.retired+=1;
+m.a.write(m.c.regs[13].wrapping_add(12u32),4,m.c.regs[0])?;
+// 000399f4: blx 0x22fd44 @ symbol stub for: __Znwm
+m.c.regs[15]=236020; m.retired+=1;
+m.c.regs[14]=236025; m.c.regs[15]=2293060; m.c.cpsr&=!32; return Some(());
+},
+236024=>{
+// 000399f8: ldr.w r11, [r4, #0x18]
+m.c.regs[15]=236024; m.retired+=1;
+m.c.regs[11]=m.a.read(m.c.regs[4].wrapping_add(24u32),4)?;
+// 000399fc: ldr r2, [r4, #0x1c]
+m.c.regs[15]=236028; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(28u32),4)?;
+// 000399fe: mov r1, r0
+m.c.regs[15]=236030; m.retired+=1;
+m.c.regs[1]=m.c.regs[0];
+// 00039a00: b 0x39a08
+m.c.regs[15]=236032; m.retired+=1;
+m.c.regs[15]=236040; continue;
+},
+236034=>{
+// 00039a02: str r0, [sp, #0xc]
+m.c.regs[15]=236034; m.retired+=1;
+m.a.write(m.c.regs[13].wrapping_add(12u32),4,m.c.regs[0])?;
+// 00039a04: movs r1, #0x0
+m.c.regs[15]=236036; m.retired+=1;
+m.c.regs[1]=0u32;m.nz(m.c.regs[1]);
+// 00039a06: mov r11, r5
+m.c.regs[15]=236038; m.retired+=1;
+m.c.regs[11]=m.c.regs[5];
+m.c.regs[15]=236040;
+},
+236040=>{
+// 00039a08: sub.w r2, r2, r11
+m.c.regs[15]=236040; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[11]; m.c.regs[2]=a.wrapping_sub(b);
+// 00039a0c: str.w r8, [sp, #0x8]
+m.c.regs[15]=236044; m.retired+=1;
+m.a.write(m.c.regs[13].wrapping_add(8u32),4,m.c.regs[8])?;
+// 00039a10: mov r10, r1
+m.c.regs[15]=236048; m.retired+=1;
+m.c.regs[10]=m.c.regs[1];
+// 00039a12: sub.w r0, r8, r2
+m.c.regs[15]=236050; m.retired+=1;
+let a=m.c.regs[8]; let b=m.c.regs[2]; m.c.regs[0]=a.wrapping_sub(b);
+// 00039a16: add.w r8, r1, r0
+m.c.regs[15]=236054; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[0]; m.c.regs[8]=a.wrapping_add(b);
+// 00039a1a: mov r1, r11
+m.c.regs[15]=236058; m.retired+=1;
+m.c.regs[1]=m.c.regs[11];
+// 00039a1c: mov r0, r8
+m.c.regs[15]=236060; m.retired+=1;
+m.c.regs[0]=m.c.regs[8];
+// 00039a1e: blx 0x22feb4 @ symbol stub for: _memcpy
+m.c.regs[15]=236062; m.retired+=1;
+m.c.regs[14]=236067; m.c.regs[15]=2293428; m.c.cpsr&=!32; return Some(());
+},
+236066=>{
+// 00039a22: ldr r1, [sp, #0x8]
+m.c.regs[15]=236066; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[13].wrapping_add(8u32),4)?;
+// 00039a24: mov r0, r11
+m.c.regs[15]=236068; m.retired+=1;
+m.c.regs[0]=m.c.regs[11];
+// 00039a26: str.w r8, [r4, #0x18]
+m.c.regs[15]=236070; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(24u32),4,m.c.regs[8])?;
+// 00039a2a: cmp r0, #0x0
+m.c.regs[15]=236074; m.retired+=1;
+m.cmp(m.c.regs[0],0u32);
+// 00039a2c: add.w r2, r10, r1
+m.c.regs[15]=236076; m.retired+=1;
+let a=m.c.regs[10]; let b=m.c.regs[1]; m.c.regs[2]=a.wrapping_add(b);
+// 00039a30: ldr r1, [sp, #0xc]
+m.c.regs[15]=236080; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[13].wrapping_add(12u32),4)?;
+// 00039a32: str r2, [r4, #0x1c]
+m.c.regs[15]=236082; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(28u32),4,m.c.regs[2])?;
+// 00039a34: add r1, r10
+m.c.regs[15]=236084; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[10]; m.c.regs[1]=a.wrapping_add(b);
+// 00039a36: str r1, [r4, #0x20]
+m.c.regs[15]=236086; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(32u32),4,m.c.regs[1])?;
+// 00039a38: beq 0x39a42
+m.c.regs[15]=236088; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236098; continue;}
+m.c.regs[15]=236090;
+},
+236090=>{
+// 00039a3a: blx 0x22fd3c @ symbol stub for: __ZdlPv
+m.c.regs[15]=236090; m.retired+=1;
+m.c.regs[14]=236095; m.c.regs[15]=2293052; m.c.cpsr&=!32; return Some(());
+},
+236094=>{
+// 00039a3e: ldr.w r8, [r6]
+m.c.regs[15]=236094; m.retired+=1;
+m.c.regs[8]=m.a.read(m.c.regs[6],4)?;
+m.c.regs[15]=236098;
+},
+236098=>{
+// 00039a42: movs r0, #0x0
+m.c.regs[15]=236098; m.retired+=1;
+m.c.regs[0]=0u32;m.nz(m.c.regs[0]);
+// 00039a44: str r0, [r4, #0x38]
+m.c.regs[15]=236100; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(56u32),4,m.c.regs[0])?;
+m.c.regs[15]=236102;
+},
+236102=>{
+// 00039a46: ldr.w r3, [r4, #0xb8]
+m.c.regs[15]=236102; m.retired+=1;
+m.c.regs[3]=m.a.read(m.c.regs[4].wrapping_add(184u32),4)?;
+// 00039a4a: ldr r0, [r4, #0x1c]
+m.c.regs[15]=236106; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(28u32),4)?;
+// 00039a4c: ldrb.w r2, [r4, #0x34]
+m.c.regs[15]=236108; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(52u32),1)?;
+// 00039a50: add.w r10, r4, #0x30
+m.c.regs[15]=236112; m.retired+=1;
+let a=m.c.regs[4]; let b=48u32; m.c.regs[10]=a.wrapping_add(b);
+// 00039a54: adds r3, #0x1
+m.c.regs[15]=236116; m.retired+=1;
+let a=m.c.regs[3]; let b=1u32; m.add_flags(a,b); m.c.regs[3]=a.wrapping_add(b);
+// 00039a56: sub.w r1, r0, r8
+m.c.regs[15]=236118; m.retired+=1;
+let a=m.c.regs[0]; let b=m.c.regs[8]; m.c.regs[1]=a.wrapping_sub(b);
+// 00039a5a: muls r2, r3, r2
+m.c.regs[15]=236122; m.retired+=1;
+m.c.regs[2]=m.c.regs[3].wrapping_mul(m.c.regs[2]);m.nz(m.c.regs[2]);
+// 00039a5c: cmp r2, r1
+m.c.regs[15]=236124; m.retired+=1;
+m.cmp(m.c.regs[2],m.c.regs[1]);
+// 00039a5e: bls 0x39a6e
+m.c.regs[15]=236126; m.retired+=1;
+if m.cond("ls") {m.c.regs[15]=236142; continue;}
+m.c.regs[15]=236128;
+},
+236128=>{
+// 00039a60: subs r1, r2, r1
+m.c.regs[15]=236128; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[1]; m.sub_flags(a,b); m.c.regs[1]=a.wrapping_sub(b);
+// 00039a62: mov r0, r6
+m.c.regs[15]=236130; m.retired+=1;
+m.c.regs[0]=m.c.regs[6];
+// 00039a64: bl 0x1a37d0
+m.c.regs[15]=236132; m.retired+=1;
+m.c.regs[14]=236137; m.c.regs[15]=1718224; return Some(());
+},
+236136=>{
+// 00039a68: ldr.w r8, [r6]
+m.c.regs[15]=236136; m.retired+=1;
+m.c.regs[8]=m.a.read(m.c.regs[6],4)?;
+// 00039a6c: b 0x39a7c
+m.c.regs[15]=236140; m.retired+=1;
+m.c.regs[15]=236156; continue;
+},
+236142=>{
+// 00039a6e: cmp r2, r1
+m.c.regs[15]=236142; m.retired+=1;
+m.cmp(m.c.regs[2],m.c.regs[1]);
+// 00039a70: bhs 0x39a7c
+m.c.regs[15]=236144; m.retired+=1;
+if m.cond("hs") {m.c.regs[15]=236156; continue;}
+m.c.regs[15]=236146;
+},
+236146=>{
+// 00039a72: add.w r1, r8, r2
+m.c.regs[15]=236146; m.retired+=1;
+let a=m.c.regs[8]; let b=m.c.regs[2]; m.c.regs[1]=a.wrapping_add(b);
+// 00039a76: cmp r0, r1
+m.c.regs[15]=236150; m.retired+=1;
+m.cmp(m.c.regs[0],m.c.regs[1]);
+// 00039a78: it ne
+m.c.regs[15]=236152; m.retired+=1;
+
+m.c.cpsr=(m.c.cpsr&!0x0600fc00)|6144;
+// 00039a7a: strne r1, [r4, #0x1c]
+m.c.regs[15]=236154; m.retired+=1;
+if m.cond("ne") { m.a.write(m.c.regs[4].wrapping_add(28u32),4,m.c.regs[1])?; }
+m.c.cpsr=(m.c.cpsr&!0x0600fc00)|0;
+m.c.regs[15]=236156;
+},
+236156=>{
+// 00039a7c: ldr r0, [r4, #0x4]
+m.c.regs[15]=236156; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(4u32),4)?;
+// 00039a7e: cbz r0, 0x39a98
+m.c.regs[15]=236158; m.retired+=1;
+if m.c.regs[0]==0 {m.c.regs[15]=236184; continue;}
+m.c.regs[15]=236160;
+},
+236160=>{
+// 00039a80: cmp r5, r8
+m.c.regs[15]=236160; m.retired+=1;
+m.cmp(m.c.regs[5],m.c.regs[8]);
+// 00039a82: bne 0x39a98
+m.c.regs[15]=236162; m.retired+=1;
+if m.cond("ne") {m.c.regs[15]=236184; continue;}
+m.c.regs[15]=236164;
+},
+236164=>{
+// 00039a84: ldr r1, [r4, #0x14]
+m.c.regs[15]=236164; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(20u32),4)?;
+// 00039a86: ldrb r3, [r1, #0x4]
+m.c.regs[15]=236166; m.retired+=1;
+m.c.regs[3]=m.a.read(m.c.regs[1].wrapping_add(4u32),1)?;
+// 00039a88: adds r1, r0, r3
+m.c.regs[15]=236168; m.retired+=1;
+let a=m.c.regs[0]; let b=m.c.regs[3]; m.add_flags(a,b); m.c.regs[1]=a.wrapping_add(b);
+// 00039a8a: str r1, [r4, #0x4]
+m.c.regs[15]=236170; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(4u32),4,m.c.regs[1])?;
+// 00039a8c: ldr r0, [r4, #0x8]
+m.c.regs[15]=236172; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(8u32),4)?;
+// 00039a8e: cmp r0, #0x0
+m.c.regs[15]=236174; m.retired+=1;
+m.cmp(m.c.regs[0],0u32);
+// 00039a90: beq 0x39af2
+m.c.regs[15]=236176; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236274; continue;}
+m.c.regs[15]=236178;
+},
+236178=>{
+// 00039a92: add.w r9, r0, r3
+m.c.regs[15]=236178; m.retired+=1;
+let a=m.c.regs[0]; let b=m.c.regs[3]; m.c.regs[9]=a.wrapping_add(b);
+// 00039a96: b 0x39af6
+m.c.regs[15]=236182; m.retired+=1;
+m.c.regs[15]=236278; continue;
+},
+236184=>{
+// 00039a98: ldr.w r1, [r4, #0xb8]
+m.c.regs[15]=236184; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(184u32),4)?;
+// 00039a9c: ldrb.w r6, [r4, #0x34]
+m.c.regs[15]=236188; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(52u32),1)?;
+// 00039aa0: ldrb.w r2, [r4, #0x30]
+m.c.regs[15]=236192; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(48u32),1)?;
+// 00039aa4: ldrb.w r0, [r4, #0x32]
+m.c.regs[15]=236196; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(50u32),1)?;
+// 00039aa8: mul r3, r6, r1
+m.c.regs[15]=236200; m.retired+=1;
+m.c.regs[3]=m.c.regs[6].wrapping_mul(m.c.regs[1]);
+// 00039aac: mla r1, r6, r1, r2
+m.c.regs[15]=236204; m.retired+=1;
+m.c.regs[1]=m.c.regs[6].wrapping_mul(m.c.regs[1]).wrapping_add(m.c.regs[2]);
+// 00039ab0: cmp r0, #0xff
+m.c.regs[15]=236208; m.retired+=1;
+m.cmp(m.c.regs[0],255u32);
+// 00039ab2: add r1, r8
+m.c.regs[15]=236210; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[8]; m.c.regs[1]=a.wrapping_add(b);
+// 00039ab4: beq 0x39abe
+m.c.regs[15]=236212; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236222; continue;}
+m.c.regs[15]=236214;
+},
+236214=>{
+// 00039ab6: add r0, r3
+m.c.regs[15]=236214; m.retired+=1;
+let a=m.c.regs[0]; let b=m.c.regs[3]; m.c.regs[0]=a.wrapping_add(b);
+// 00039ab8: add.w r9, r8, r0
+m.c.regs[15]=236216; m.retired+=1;
+let a=m.c.regs[8]; let b=m.c.regs[0]; m.c.regs[9]=a.wrapping_add(b);
+// 00039abc: b 0x39ac2
+m.c.regs[15]=236220; m.retired+=1;
+m.c.regs[15]=236226; continue;
+},
+236222=>{
+// 00039abe: mov.w r9, #0x0
+m.c.regs[15]=236222; m.retired+=1;
+m.c.regs[9]=0u32;
+m.c.regs[15]=236226;
+},
+236226=>{
+// 00039ac2: ldrb.w r2, [r4, #0x33]
+m.c.regs[15]=236226; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(51u32),1)?;
+// 00039ac6: cmp r2, #0xff
+m.c.regs[15]=236230; m.retired+=1;
+m.cmp(m.c.regs[2],255u32);
+// 00039ac8: beq 0x39ad0
+m.c.regs[15]=236232; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236240; continue;}
+m.c.regs[15]=236234;
+},
+236234=>{
+// 00039aca: add r2, r3
+m.c.regs[15]=236234; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[3]; m.c.regs[2]=a.wrapping_add(b);
+// 00039acc: add r2, r8
+m.c.regs[15]=236236; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[8]; m.c.regs[2]=a.wrapping_add(b);
+// 00039ace: b 0x39ad2
+m.c.regs[15]=236238; m.retired+=1;
+m.c.regs[15]=236242; continue;
+},
+236240=>{
+// 00039ad0: movs r2, #0x0
+m.c.regs[15]=236240; m.retired+=1;
+m.c.regs[2]=0u32;m.nz(m.c.regs[2]);
+m.c.regs[15]=236242;
+},
+236242=>{
+// 00039ad2: ldrb.w r6, [r4, #0x31]
+m.c.regs[15]=236242; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(49u32),1)?;
+// 00039ad6: cmp r6, #0xff
+m.c.regs[15]=236246; m.retired+=1;
+m.cmp(m.c.regs[6],255u32);
+// 00039ad8: beq 0x39ae0
+m.c.regs[15]=236248; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236256; continue;}
+m.c.regs[15]=236250;
+},
+236250=>{
+// 00039ada: add r3, r6
+m.c.regs[15]=236250; m.retired+=1;
+let a=m.c.regs[3]; let b=m.c.regs[6]; m.c.regs[3]=a.wrapping_add(b);
+// 00039adc: add r3, r8
+m.c.regs[15]=236252; m.retired+=1;
+let a=m.c.regs[3]; let b=m.c.regs[8]; m.c.regs[3]=a.wrapping_add(b);
+// 00039ade: b 0x39ae2
+m.c.regs[15]=236254; m.retired+=1;
+m.c.regs[15]=236258; continue;
+},
+236256=>{
+// 00039ae0: movs r3, #0x0
+m.c.regs[15]=236256; m.retired+=1;
+m.c.regs[3]=0u32;m.nz(m.c.regs[3]);
+m.c.regs[15]=236258;
+},
+236258=>{
+// 00039ae2: add.w r0, r4, #0xc
+m.c.regs[15]=236258; m.retired+=1;
+let a=m.c.regs[4]; let b=12u32; m.c.regs[0]=a.wrapping_add(b);
+// 00039ae6: str r1, [r4, #0x4]
+m.c.regs[15]=236262; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(4u32),4,m.c.regs[1])?;
+// 00039ae8: str.w r9, [r4, #0x8]
+m.c.regs[15]=236264; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(8u32),4,m.c.regs[9])?;
+// 00039aec: stm.w r0, {r2, r3, r10}
+m.c.regs[15]=236268; m.retired+=1;
+m.a.push_words(m.c.regs[0],&[m.c.regs[2],m.c.regs[3],m.c.regs[10]])?;
+// 00039af0: b 0x39b16
+m.c.regs[15]=236272; m.retired+=1;
+m.c.regs[15]=236310; continue;
+},
+236274=>{
+// 00039af2: mov.w r9, #0x0
+m.c.regs[15]=236274; m.retired+=1;
+m.c.regs[9]=0u32;
+m.c.regs[15]=236278;
+},
+236278=>{
+// 00039af6: str.w r9, [r4, #0x8]
+m.c.regs[15]=236278; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(8u32),4,m.c.regs[9])?;
+// 00039afa: ldr r2, [r4, #0xc]
+m.c.regs[15]=236282; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(12u32),4)?;
+// 00039afc: cmp r2, #0x0
+m.c.regs[15]=236284; m.retired+=1;
+m.cmp(m.c.regs[2],0u32);
+// 00039afe: beq 0x39b04
+m.c.regs[15]=236286; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236292; continue;}
+m.c.regs[15]=236288;
+},
+236288=>{
+// 00039b00: add r2, r3
+m.c.regs[15]=236288; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[3]; m.c.regs[2]=a.wrapping_add(b);
+// 00039b02: b 0x39b06
+m.c.regs[15]=236290; m.retired+=1;
+m.c.regs[15]=236294; continue;
+},
+236292=>{
+// 00039b04: movs r2, #0x0
+m.c.regs[15]=236292; m.retired+=1;
+m.c.regs[2]=0u32;m.nz(m.c.regs[2]);
+m.c.regs[15]=236294;
+},
+236294=>{
+// 00039b06: str r2, [r4, #0xc]
+m.c.regs[15]=236294; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(12u32),4,m.c.regs[2])?;
+// 00039b08: ldr r6, [r4, #0x10]
+m.c.regs[15]=236296; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(16u32),4)?;
+// 00039b0a: cmp r6, #0x0
+m.c.regs[15]=236298; m.retired+=1;
+m.cmp(m.c.regs[6],0u32);
+// 00039b0c: beq 0x39b12
+m.c.regs[15]=236300; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236306; continue;}
+m.c.regs[15]=236302;
+},
+236302=>{
+// 00039b0e: add r3, r6
+m.c.regs[15]=236302; m.retired+=1;
+let a=m.c.regs[3]; let b=m.c.regs[6]; m.c.regs[3]=a.wrapping_add(b);
+// 00039b10: b 0x39b14
+m.c.regs[15]=236304; m.retired+=1;
+m.c.regs[15]=236308; continue;
+},
+236306=>{
+// 00039b12: movs r3, #0x0
+m.c.regs[15]=236306; m.retired+=1;
+m.c.regs[3]=0u32;m.nz(m.c.regs[3]);
+m.c.regs[15]=236308;
+},
+236308=>{
+// 00039b14: str r3, [r4, #0x10]
+m.c.regs[15]=236308; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(16u32),4,m.c.regs[3])?;
+m.c.regs[15]=236310;
+},
+236310=>{
+// 00039b16: ldrb.w r6, [r4, #0x70]
+m.c.regs[15]=236310; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(112u32),1)?;
+// 00039b1a: cbz r6, 0x39b54
+m.c.regs[15]=236314; m.retired+=1;
+if m.c.regs[6]==0 {m.c.regs[15]=236372; continue;}
+m.c.regs[15]=236316;
+},
+_=>return Some(()), } } }
+fn block_97<A:LoadingAccess>(m:&mut Machine<A>)->Option<()> {  loop {match m.c.regs[15] {
+236136=>{
+// 00039a68: ldr.w r8, [r6]
+m.c.regs[15]=236136; m.retired+=1;
+m.c.regs[8]=m.a.read(m.c.regs[6],4)?;
+// 00039a6c: b 0x39a7c
+m.c.regs[15]=236140; m.retired+=1;
+m.c.regs[15]=236156; continue;
+},
+236142=>{
+// 00039a6e: cmp r2, r1
+m.c.regs[15]=236142; m.retired+=1;
+m.cmp(m.c.regs[2],m.c.regs[1]);
+// 00039a70: bhs 0x39a7c
+m.c.regs[15]=236144; m.retired+=1;
+if m.cond("hs") {m.c.regs[15]=236156; continue;}
+m.c.regs[15]=236146;
+},
+236146=>{
+// 00039a72: add.w r1, r8, r2
+m.c.regs[15]=236146; m.retired+=1;
+let a=m.c.regs[8]; let b=m.c.regs[2]; m.c.regs[1]=a.wrapping_add(b);
+// 00039a76: cmp r0, r1
+m.c.regs[15]=236150; m.retired+=1;
+m.cmp(m.c.regs[0],m.c.regs[1]);
+// 00039a78: it ne
+m.c.regs[15]=236152; m.retired+=1;
+
+m.c.cpsr=(m.c.cpsr&!0x0600fc00)|6144;
+// 00039a7a: strne r1, [r4, #0x1c]
+m.c.regs[15]=236154; m.retired+=1;
+if m.cond("ne") { m.a.write(m.c.regs[4].wrapping_add(28u32),4,m.c.regs[1])?; }
+m.c.cpsr=(m.c.cpsr&!0x0600fc00)|0;
+m.c.regs[15]=236156;
+},
+236156=>{
+// 00039a7c: ldr r0, [r4, #0x4]
+m.c.regs[15]=236156; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(4u32),4)?;
+// 00039a7e: cbz r0, 0x39a98
+m.c.regs[15]=236158; m.retired+=1;
+if m.c.regs[0]==0 {m.c.regs[15]=236184; continue;}
+m.c.regs[15]=236160;
+},
+236160=>{
+// 00039a80: cmp r5, r8
+m.c.regs[15]=236160; m.retired+=1;
+m.cmp(m.c.regs[5],m.c.regs[8]);
+// 00039a82: bne 0x39a98
+m.c.regs[15]=236162; m.retired+=1;
+if m.cond("ne") {m.c.regs[15]=236184; continue;}
+m.c.regs[15]=236164;
+},
+236164=>{
+// 00039a84: ldr r1, [r4, #0x14]
+m.c.regs[15]=236164; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(20u32),4)?;
+// 00039a86: ldrb r3, [r1, #0x4]
+m.c.regs[15]=236166; m.retired+=1;
+m.c.regs[3]=m.a.read(m.c.regs[1].wrapping_add(4u32),1)?;
+// 00039a88: adds r1, r0, r3
+m.c.regs[15]=236168; m.retired+=1;
+let a=m.c.regs[0]; let b=m.c.regs[3]; m.add_flags(a,b); m.c.regs[1]=a.wrapping_add(b);
+// 00039a8a: str r1, [r4, #0x4]
+m.c.regs[15]=236170; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(4u32),4,m.c.regs[1])?;
+// 00039a8c: ldr r0, [r4, #0x8]
+m.c.regs[15]=236172; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(8u32),4)?;
+// 00039a8e: cmp r0, #0x0
+m.c.regs[15]=236174; m.retired+=1;
+m.cmp(m.c.regs[0],0u32);
+// 00039a90: beq 0x39af2
+m.c.regs[15]=236176; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236274; continue;}
+m.c.regs[15]=236178;
+},
+236178=>{
+// 00039a92: add.w r9, r0, r3
+m.c.regs[15]=236178; m.retired+=1;
+let a=m.c.regs[0]; let b=m.c.regs[3]; m.c.regs[9]=a.wrapping_add(b);
+// 00039a96: b 0x39af6
+m.c.regs[15]=236182; m.retired+=1;
+m.c.regs[15]=236278; continue;
+},
+236184=>{
+// 00039a98: ldr.w r1, [r4, #0xb8]
+m.c.regs[15]=236184; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(184u32),4)?;
+// 00039a9c: ldrb.w r6, [r4, #0x34]
+m.c.regs[15]=236188; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(52u32),1)?;
+// 00039aa0: ldrb.w r2, [r4, #0x30]
+m.c.regs[15]=236192; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(48u32),1)?;
+// 00039aa4: ldrb.w r0, [r4, #0x32]
+m.c.regs[15]=236196; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4].wrapping_add(50u32),1)?;
+// 00039aa8: mul r3, r6, r1
+m.c.regs[15]=236200; m.retired+=1;
+m.c.regs[3]=m.c.regs[6].wrapping_mul(m.c.regs[1]);
+// 00039aac: mla r1, r6, r1, r2
+m.c.regs[15]=236204; m.retired+=1;
+m.c.regs[1]=m.c.regs[6].wrapping_mul(m.c.regs[1]).wrapping_add(m.c.regs[2]);
+// 00039ab0: cmp r0, #0xff
+m.c.regs[15]=236208; m.retired+=1;
+m.cmp(m.c.regs[0],255u32);
+// 00039ab2: add r1, r8
+m.c.regs[15]=236210; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[8]; m.c.regs[1]=a.wrapping_add(b);
+// 00039ab4: beq 0x39abe
+m.c.regs[15]=236212; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236222; continue;}
+m.c.regs[15]=236214;
+},
+236214=>{
+// 00039ab6: add r0, r3
+m.c.regs[15]=236214; m.retired+=1;
+let a=m.c.regs[0]; let b=m.c.regs[3]; m.c.regs[0]=a.wrapping_add(b);
+// 00039ab8: add.w r9, r8, r0
+m.c.regs[15]=236216; m.retired+=1;
+let a=m.c.regs[8]; let b=m.c.regs[0]; m.c.regs[9]=a.wrapping_add(b);
+// 00039abc: b 0x39ac2
+m.c.regs[15]=236220; m.retired+=1;
+m.c.regs[15]=236226; continue;
+},
+236222=>{
+// 00039abe: mov.w r9, #0x0
+m.c.regs[15]=236222; m.retired+=1;
+m.c.regs[9]=0u32;
+m.c.regs[15]=236226;
+},
+236226=>{
+// 00039ac2: ldrb.w r2, [r4, #0x33]
+m.c.regs[15]=236226; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(51u32),1)?;
+// 00039ac6: cmp r2, #0xff
+m.c.regs[15]=236230; m.retired+=1;
+m.cmp(m.c.regs[2],255u32);
+// 00039ac8: beq 0x39ad0
+m.c.regs[15]=236232; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236240; continue;}
+m.c.regs[15]=236234;
+},
+236234=>{
+// 00039aca: add r2, r3
+m.c.regs[15]=236234; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[3]; m.c.regs[2]=a.wrapping_add(b);
+// 00039acc: add r2, r8
+m.c.regs[15]=236236; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[8]; m.c.regs[2]=a.wrapping_add(b);
+// 00039ace: b 0x39ad2
+m.c.regs[15]=236238; m.retired+=1;
+m.c.regs[15]=236242; continue;
+},
+236240=>{
+// 00039ad0: movs r2, #0x0
+m.c.regs[15]=236240; m.retired+=1;
+m.c.regs[2]=0u32;m.nz(m.c.regs[2]);
+m.c.regs[15]=236242;
+},
+236242=>{
+// 00039ad2: ldrb.w r6, [r4, #0x31]
+m.c.regs[15]=236242; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(49u32),1)?;
+// 00039ad6: cmp r6, #0xff
+m.c.regs[15]=236246; m.retired+=1;
+m.cmp(m.c.regs[6],255u32);
+// 00039ad8: beq 0x39ae0
+m.c.regs[15]=236248; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236256; continue;}
+m.c.regs[15]=236250;
+},
+236250=>{
+// 00039ada: add r3, r6
+m.c.regs[15]=236250; m.retired+=1;
+let a=m.c.regs[3]; let b=m.c.regs[6]; m.c.regs[3]=a.wrapping_add(b);
+// 00039adc: add r3, r8
+m.c.regs[15]=236252; m.retired+=1;
+let a=m.c.regs[3]; let b=m.c.regs[8]; m.c.regs[3]=a.wrapping_add(b);
+// 00039ade: b 0x39ae2
+m.c.regs[15]=236254; m.retired+=1;
+m.c.regs[15]=236258; continue;
+},
+236256=>{
+// 00039ae0: movs r3, #0x0
+m.c.regs[15]=236256; m.retired+=1;
+m.c.regs[3]=0u32;m.nz(m.c.regs[3]);
+m.c.regs[15]=236258;
+},
+236258=>{
+// 00039ae2: add.w r0, r4, #0xc
+m.c.regs[15]=236258; m.retired+=1;
+let a=m.c.regs[4]; let b=12u32; m.c.regs[0]=a.wrapping_add(b);
+// 00039ae6: str r1, [r4, #0x4]
+m.c.regs[15]=236262; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(4u32),4,m.c.regs[1])?;
+// 00039ae8: str.w r9, [r4, #0x8]
+m.c.regs[15]=236264; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(8u32),4,m.c.regs[9])?;
+// 00039aec: stm.w r0, {r2, r3, r10}
+m.c.regs[15]=236268; m.retired+=1;
+m.a.push_words(m.c.regs[0],&[m.c.regs[2],m.c.regs[3],m.c.regs[10]])?;
+// 00039af0: b 0x39b16
+m.c.regs[15]=236272; m.retired+=1;
+m.c.regs[15]=236310; continue;
+},
+236274=>{
+// 00039af2: mov.w r9, #0x0
+m.c.regs[15]=236274; m.retired+=1;
+m.c.regs[9]=0u32;
+m.c.regs[15]=236278;
+},
+236278=>{
+// 00039af6: str.w r9, [r4, #0x8]
+m.c.regs[15]=236278; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(8u32),4,m.c.regs[9])?;
+// 00039afa: ldr r2, [r4, #0xc]
+m.c.regs[15]=236282; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(12u32),4)?;
+// 00039afc: cmp r2, #0x0
+m.c.regs[15]=236284; m.retired+=1;
+m.cmp(m.c.regs[2],0u32);
+// 00039afe: beq 0x39b04
+m.c.regs[15]=236286; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236292; continue;}
+m.c.regs[15]=236288;
+},
+236288=>{
+// 00039b00: add r2, r3
+m.c.regs[15]=236288; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[3]; m.c.regs[2]=a.wrapping_add(b);
+// 00039b02: b 0x39b06
+m.c.regs[15]=236290; m.retired+=1;
+m.c.regs[15]=236294; continue;
+},
+236292=>{
+// 00039b04: movs r2, #0x0
+m.c.regs[15]=236292; m.retired+=1;
+m.c.regs[2]=0u32;m.nz(m.c.regs[2]);
+m.c.regs[15]=236294;
+},
+236294=>{
+// 00039b06: str r2, [r4, #0xc]
+m.c.regs[15]=236294; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(12u32),4,m.c.regs[2])?;
+// 00039b08: ldr r6, [r4, #0x10]
+m.c.regs[15]=236296; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(16u32),4)?;
+// 00039b0a: cmp r6, #0x0
+m.c.regs[15]=236298; m.retired+=1;
+m.cmp(m.c.regs[6],0u32);
+// 00039b0c: beq 0x39b12
+m.c.regs[15]=236300; m.retired+=1;
+if m.cond("eq") {m.c.regs[15]=236306; continue;}
+m.c.regs[15]=236302;
+},
+236302=>{
+// 00039b0e: add r3, r6
+m.c.regs[15]=236302; m.retired+=1;
+let a=m.c.regs[3]; let b=m.c.regs[6]; m.c.regs[3]=a.wrapping_add(b);
+// 00039b10: b 0x39b14
+m.c.regs[15]=236304; m.retired+=1;
+m.c.regs[15]=236308; continue;
+},
+236306=>{
+// 00039b12: movs r3, #0x0
+m.c.regs[15]=236306; m.retired+=1;
+m.c.regs[3]=0u32;m.nz(m.c.regs[3]);
+m.c.regs[15]=236308;
+},
+236308=>{
+// 00039b14: str r3, [r4, #0x10]
+m.c.regs[15]=236308; m.retired+=1;
+m.a.write(m.c.regs[4].wrapping_add(16u32),4,m.c.regs[3])?;
+m.c.regs[15]=236310;
+},
+236310=>{
+// 00039b16: ldrb.w r6, [r4, #0x70]
+m.c.regs[15]=236310; m.retired+=1;
+m.c.regs[6]=m.a.read(m.c.regs[4].wrapping_add(112u32),1)?;
+// 00039b1a: cbz r6, 0x39b54
+m.c.regs[15]=236314; m.retired+=1;
+if m.c.regs[6]==0 {m.c.regs[15]=236372; continue;}
+m.c.regs[15]=236316;
+},
+_=>return Some(()), } } }
+fn block_98<A:LoadingAccess>(m:&mut Machine<A>)->Option<()> {  loop {match m.c.regs[15] {
+236474=>{
+// 00039bba: add r4, sp, #0x10
+m.c.regs[15]=236474; m.retired+=1;
+let a=m.c.regs[13]; let b=16u32; m.c.regs[4]=a.wrapping_add(b);
+// 00039bbc: vld1.64 {d8, d9}, [r4:128]
+m.c.regs[15]=236476; m.retired+=1;
+let addr=m.c.regs[4];let w0=m.a.read(addr.wrapping_add(0),4)?;let w1=m.a.read(addr.wrapping_add(4),4)?;let w2=m.a.read(addr.wrapping_add(8),4)?;let w3=m.a.read(addr.wrapping_add(12),4)?;m.c.extregs[16]=w0;m.c.extregs[17]=w1;m.c.extregs[18]=w2;m.c.extregs[19]=w3;
+// 00039bc0: sub.w r4, r7, #0x18
+m.c.regs[15]=236480; m.retired+=1;
+let a=m.c.regs[7]; let b=24u32; m.c.regs[4]=a.wrapping_sub(b);
+// 00039bc4: mov sp, r4
+m.c.regs[15]=236484; m.retired+=1;
+m.c.regs[13]=m.c.regs[4];
+// 00039bc6: pop.w {r8, r10, r11}
+m.c.regs[15]=236486; m.retired+=1;
+let addr=m.c.regs[13];let w0=m.a.read(addr.wrapping_add(0),4)?;let w1=m.a.read(addr.wrapping_add(4),4)?;let w2=m.a.read(addr.wrapping_add(8),4)?;m.c.regs[8]=w0;m.c.regs[10]=w1;m.c.regs[11]=w2;m.c.regs[13]=addr.wrapping_add(12);
+// 00039bca: pop {r4, r5, r6, r7, pc}
+m.c.regs[15]=236490; m.retired+=1;
+let addr=m.c.regs[13];let w0=m.a.read(addr.wrapping_add(0),4)?;let w1=m.a.read(addr.wrapping_add(4),4)?;let w2=m.a.read(addr.wrapping_add(8),4)?;let w3=m.a.read(addr.wrapping_add(12),4)?;let w4=m.a.read(addr.wrapping_add(16),4)?;m.c.regs[4]=w0;m.c.regs[5]=w1;m.c.regs[6]=w2;m.c.regs[7]=w3;m.c.regs[13]=addr.wrapping_add(20);let dest=w4;m.c.cpsr=(m.c.cpsr & !32)|((dest&1)<<5);m.c.regs[15]=dest&!1;return Some(());
+},
+_=>return Some(()), } } }
+fn block_99<A:LoadingAccess>(m:&mut Machine<A>)->Option<()> {  loop {match m.c.regs[15] {
+1718224=>{
+// 001a37d0: push {r4, r5, r6, r7, lr}
+m.c.regs[15]=1718224; m.retired+=1;
+let addr=m.c.regs[13].wrapping_sub(20); m.a.push_words(addr,&[m.c.regs[4],m.c.regs[5],m.c.regs[6],m.c.regs[7],m.c.regs[14]])?; m.c.regs[13]=addr;
+// 001a37d2: add r7, sp, #0xc
+m.c.regs[15]=1718226; m.retired+=1;
+let a=m.c.regs[13]; let b=12u32; m.c.regs[7]=a.wrapping_add(b);
+// 001a37d4: push.w {r8, r10, r11}
+m.c.regs[15]=1718228; m.retired+=1;
+let addr=m.c.regs[13].wrapping_sub(12); m.a.push_words(addr,&[m.c.regs[8],m.c.regs[10],m.c.regs[11]])?; m.c.regs[13]=addr;
+// 001a37d8: mov r4, r0
+m.c.regs[15]=1718232; m.retired+=1;
+m.c.regs[4]=m.c.regs[0];
+// 001a37da: mov r5, r1
+m.c.regs[15]=1718234; m.retired+=1;
+m.c.regs[5]=m.c.regs[1];
+// 001a37dc: ldr r1, [r4, #0x4]
+m.c.regs[15]=1718236; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(4u32),4)?;
+// 001a37de: ldr r2, [r4, #0x8]
+m.c.regs[15]=1718238; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(8u32),4)?;
+// 001a37e0: subs r0, r2, r1
+m.c.regs[15]=1718240; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[1]; m.sub_flags(a,b); m.c.regs[0]=a.wrapping_sub(b);
+// 001a37e2: cmp r0, r5
+m.c.regs[15]=1718242; m.retired+=1;
+m.cmp(m.c.regs[0],m.c.regs[5]);
+// 001a37e4: bhs 0x1a3826
+m.c.regs[15]=1718244; m.retired+=1;
+if m.cond("hs") {m.c.regs[15]=1718310; continue;}
+m.c.regs[15]=1718246;
+},
+1718246=>{
+// 001a37e6: ldr r0, [r4]
+m.c.regs[15]=1718246; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4],4)?;
+// 001a37e8: subs r1, r1, r0
+m.c.regs[15]=1718248; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[0]; m.sub_flags(a,b); m.c.regs[1]=a.wrapping_sub(b);
+// 001a37ea: adds r6, r1, r5
+m.c.regs[15]=1718250; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[5]; m.add_flags(a,b); m.c.regs[6]=a.wrapping_add(b);
+// 001a37ec: cmp.w r6, #0xffffffff
+m.c.regs[15]=1718252; m.retired+=1;
+m.cmp(m.c.regs[6],4294967295u32);
+// 001a37f0: bgt 0x1a37fc
+m.c.regs[15]=1718256; m.retired+=1;
+if m.cond("gt") {m.c.regs[15]=1718268; continue;}
+m.c.regs[15]=1718258;
+},
+1718258=>{
+// 001a37f2: mov r0, r4
+m.c.regs[15]=1718258; m.retired+=1;
+m.c.regs[0]=m.c.regs[4];
+// 001a37f4: blx 0x22fc10 @ symbol stub for: __ZNKSt3__120__vector_base_commonILb1EE20__throw_length_errorEv
+m.c.regs[15]=1718260; m.retired+=1;
+m.c.regs[14]=1718265; m.c.regs[15]=2292752; m.c.cpsr&=!32; return Some(());
+},
+1718264=>{
+// 001a37f8: ldr r0, [r4]
+m.c.regs[15]=1718264; m.retired+=1;
+m.c.regs[0]=m.a.read(m.c.regs[4],4)?;
+// 001a37fa: ldr r2, [r4, #0x8]
+m.c.regs[15]=1718266; m.retired+=1;
+m.c.regs[2]=m.a.read(m.c.regs[4].wrapping_add(8u32),4)?;
+m.c.regs[15]=1718268;
+},
+1718268=>{
+// 001a37fc: subs r1, r2, r0
+m.c.regs[15]=1718268; m.retired+=1;
+let a=m.c.regs[2]; let b=m.c.regs[0]; m.sub_flags(a,b); m.c.regs[1]=a.wrapping_sub(b);
+// 001a37fe: mvn r2, #0xc0000000
+m.c.regs[15]=1718270; m.retired+=1;
+m.c.regs[2]=!3221225472u32;
+// 001a3802: cmp r1, r2
+m.c.regs[15]=1718274; m.retired+=1;
+m.cmp(m.c.regs[1],m.c.regs[2]);
+// 001a3804: bhs 0x1a383e
+m.c.regs[15]=1718276; m.retired+=1;
+if m.cond("hs") {m.c.regs[15]=1718334; continue;}
+m.c.regs[15]=1718278;
+},
+1718278=>{
+// 001a3806: lsl.w r10, r1, #0x1
+m.c.regs[15]=1718278; m.retired+=1;
+m.c.regs[10]=m.shift(m.c.regs[1],1u32,0,false);
+// 001a380a: cmp r10, r6
+m.c.regs[15]=1718282; m.retired+=1;
+m.cmp(m.c.regs[10],m.c.regs[6]);
+// 001a380c: it lo
+m.c.regs[15]=1718284; m.retired+=1;
+
+m.c.cpsr=(m.c.cpsr&!0x0600fc00)|14336;
+// 001a380e: movlo r10, r6
+m.c.regs[15]=1718286; m.retired+=1;
+if m.cond("lo") { m.c.regs[10]=m.c.regs[6]; }
+m.c.cpsr=(m.c.cpsr&!0x0600fc00)|0;
+// 001a3810: ldr r1, [r4, #0x4]
+m.c.regs[15]=1718288; m.retired+=1;
+m.c.regs[1]=m.a.read(m.c.regs[4].wrapping_add(4u32),4)?;
+// 001a3812: cmp.w r10, #0x0
+m.c.regs[15]=1718290; m.retired+=1;
+m.cmp(m.c.regs[10],0u32);
+// 001a3816: sub.w r6, r1, r0
+m.c.regs[15]=1718294; m.retired+=1;
+let a=m.c.regs[1]; let b=m.c.regs[0]; m.c.regs[6]=a.wrapping_sub(b);
+// 001a381a: bne 0x1a3846
+m.c.regs[15]=1718298; m.retired+=1;
+if m.cond("ne") {m.c.regs[15]=1718342; continue;}
+m.c.regs[15]=1718300;
+},
+1718300=>{
+// 001a381c: mov.w r10, #0x0
+m.c.regs[15]=1718300; m.retired+=1;
+m.c.regs[10]=0u32;
+// 001a3820: mov.w r11, #0x0
+m.c.regs[15]=1718304; m.retired+=1;
+m.c.regs[11]=0u32;
+// 001a3824: b 0x1a384e
+m.c.regs[15]=1718308; m.retired+=1;
+m.c.regs[15]=1718350; continue;
+},
+1718310=>{
+// 001a3826: movs r0, #0x0
+m.c.regs[15]=1718310; m.retired+=1;
+m.c.regs[0]=0u32;m.nz(m.c.regs[0]);
+m.c.regs[15]=1718312;
+},
+_=>return Some(()), } } }
+fn block_100<A:LoadingAccess>(m:&mut Machine<A>)->Option<()> {  loop {match m.c.regs[15] {
+1718332=>{
+// 001a383c: b 0x1a389c
+m.c.regs[15]=1718332; m.retired+=1;
+m.c.regs[15]=1718428; continue;
+},
+_=>return Some(()), } } }
+fn block_101<A:LoadingAccess>(m:&mut Machine<A>)->Option<()> {  loop {match m.c.regs[15] {
+1718428=>{
+// 001a389c: pop.w {r8, r10, r11}
+m.c.regs[15]=1718428; m.retired+=1;
+let addr=m.c.regs[13];let w0=m.a.read(addr.wrapping_add(0),4)?;let w1=m.a.read(addr.wrapping_add(4),4)?;let w2=m.a.read(addr.wrapping_add(8),4)?;m.c.regs[8]=w0;m.c.regs[10]=w1;m.c.regs[11]=w2;m.c.regs[13]=addr.wrapping_add(12);
+// 001a38a0: pop {r4, r5, r6, r7, pc}
+m.c.regs[15]=1718432; m.retired+=1;
+let addr=m.c.regs[13];let w0=m.a.read(addr.wrapping_add(0),4)?;let w1=m.a.read(addr.wrapping_add(4),4)?;let w2=m.a.read(addr.wrapping_add(8),4)?;let w3=m.a.read(addr.wrapping_add(12),4)?;let w4=m.a.read(addr.wrapping_add(16),4)?;m.c.regs[4]=w0;m.c.regs[5]=w1;m.c.regs[6]=w2;m.c.regs[7]=w3;m.c.regs[13]=addr.wrapping_add(20);let dest=w4;m.c.cpsr=(m.c.cpsr & !32)|((dest&1)<<5);m.c.regs[15]=dest&!1;return Some(());
+},
+_=>return Some(()), } } }
+pub(super) fn entry_index(pc:u32)->Option<usize>{match pc{326448=>Some(0),327178=>Some(1),1656628=>Some(2),1656692=>Some(3),1656798=>Some(4),295752=>Some(5),296034=>Some(6),1101488=>Some(7),457812=>Some(8),1457028=>Some(9),1461410=>Some(10),113976=>Some(11),783072=>Some(12),1456910=>Some(13),1461360=>Some(14),1101650=>Some(15),1101738=>Some(16),1102384=>Some(17),321362=>Some(18),154372=>Some(19),154474=>Some(20),1101876=>Some(21),1101950=>Some(22),1102034=>Some(23),1102056=>Some(24),1102162=>Some(25),1102182=>Some(26),1102336=>Some(27),1102444=>Some(28),457636=>Some(29),457708=>Some(30),457878=>Some(31),457958=>Some(32),879614=>Some(33),879670=>Some(34),879562=>Some(35),879762=>Some(36),891966=>Some(37),892098=>Some(38),1656972=>Some(39),296234=>Some(40),296272=>Some(41),296310=>Some(42),783266=>Some(43),783346=>Some(44),783214=>Some(45),629868=>Some(46),629892=>Some(47),1868652=>Some(48),1868682=>Some(49),1868818=>Some(50),1801400=>Some(51),1801466=>Some(52),1030506=>Some(53),1030526=>Some(54),1030734=>Some(55),628276=>Some(56),628354=>Some(57),596608=>Some(58),596628=>Some(59),596652=>Some(60),1031432=>Some(61),1232896=>Some(62),1233796=>Some(63),1234706=>Some(64),1801454=>Some(65),710966=>Some(66),711066=>Some(67),1118838=>Some(68),1118920=>Some(69),682970=>Some(70),683006=>Some(71),1058958=>Some(72),1059008=>Some(73),1059270=>Some(74),1059392=>Some(75),1059446=>Some(76),2013284=>Some(77),235652=>Some(78),235846=>Some(79),149636=>Some(80),149698=>Some(81),935780=>Some(82),935870=>Some(83),935928=>Some(84),935982=>Some(85),936040=>Some(86),936096=>Some(87),1656982=>Some(88),628196=>Some(89),236372=>Some(90),682960=>Some(91),683118=>Some(92),683270=>Some(93),711498=>Some(94),1031052=>Some(95),235932=>Some(96),236136=>Some(97),236474=>Some(98),1718224=>Some(99),1718332=>Some(100),1718428=>Some(101),_=>None}}
+pub(super) fn execute<A:LoadingAccess>(index:usize,m:&mut Machine<A>)->Option<()>{match index{0=>block_0(m),1=>block_1(m),2=>block_2(m),3=>block_3(m),4=>block_4(m),5=>block_5(m),6=>block_6(m),7=>block_7(m),8=>block_8(m),9=>block_9(m),10=>block_10(m),11=>block_11(m),12=>block_12(m),13=>block_13(m),14=>block_14(m),15=>block_15(m),16=>block_16(m),17=>block_17(m),18=>block_18(m),19=>block_19(m),20=>block_20(m),21=>block_21(m),22=>block_22(m),23=>block_23(m),24=>block_24(m),25=>block_25(m),26=>block_26(m),27=>block_27(m),28=>block_28(m),29=>block_29(m),30=>block_30(m),31=>block_31(m),32=>block_32(m),33=>block_33(m),34=>block_34(m),35=>block_35(m),36=>block_36(m),37=>block_37(m),38=>block_38(m),39=>block_39(m),40=>block_40(m),41=>block_41(m),42=>block_42(m),43=>block_43(m),44=>block_44(m),45=>block_45(m),46=>block_46(m),47=>block_47(m),48=>block_48(m),49=>block_49(m),50=>block_50(m),51=>block_51(m),52=>block_52(m),53=>block_53(m),54=>block_54(m),55=>block_55(m),56=>block_56(m),57=>block_57(m),58=>block_58(m),59=>block_59(m),60=>block_60(m),61=>block_61(m),62=>block_62(m),63=>block_63(m),64=>block_64(m),65=>block_65(m),66=>block_66(m),67=>block_67(m),68=>block_68(m),69=>block_69(m),70=>block_70(m),71=>block_71(m),72=>block_72(m),73=>block_73(m),74=>block_74(m),75=>block_75(m),76=>block_76(m),77=>block_77(m),78=>block_78(m),79=>block_79(m),80=>block_80(m),81=>block_81(m),82=>block_82(m),83=>block_83(m),84=>block_84(m),85=>block_85(m),86=>block_86(m),87=>block_87(m),88=>block_88(m),89=>block_89(m),90=>block_90(m),91=>block_91(m),92=>block_92(m),93=>block_93(m),94=>block_94(m),95=>block_95(m),96=>block_96(m),97=>block_97(m),98=>block_98(m),99=>block_99(m),100=>block_100(m),101=>block_101(m),_=>None}}
 
 // After shadow validation, execute directly against guest memory. A failing
 // access leaves PC/ITSTATE at that instruction and retires only earlier work.

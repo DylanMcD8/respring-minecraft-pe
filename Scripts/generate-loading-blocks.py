@@ -47,6 +47,11 @@ ranges += [(0x39b54, 0x39bba)]
 ranges += [(0xa6bd0, 0xa6bfe), (0xa6c6e, 0xa6ca2), (0xa6d06, 0xa6d10)]
 # Face material classification and appending a terrain traversal record.
 ranges += [(0xadb4a,0xadb9a),(0xfbb8c,0xfbbec)]
+# The rest of Tessellator::vertex around that tail: entry and offset updates
+# (also resumed after the vector append call), the untransformed exit, and
+# the in-place vector<uint8_t> append around the existing zero-fill kernel.
+ranges += [(0x3999c,0x39b1c),(0x39a68,0x39b1c),(0x39bba,0x39bcc),
+           (0x1a37d0,0x1a3828),(0x1a383c,0x1a383e),(0x1a389c,0x1a38a2)]
 lines=[]
 for line in (Path(sys.argv[1])/'disassembly-armv7.txt').read_text().splitlines():
  m=re.match(r'^([0-9a-f]{8})\s+[0-9a-f]+\s+(\S+)\s*(.*)',line)
@@ -124,6 +129,11 @@ def translate(pc,op,args,nextpc,loop_guard=None):
  elif base=='mls':code=f'{d}={val(a[3],pc)}.wrapping_sub({val(a[1],pc)}.wrapping_mul({val(a[2],pc)}));'
  elif base=='mla':code=f'{d}={val(a[1],pc)}.wrapping_mul({val(a[2],pc)}).wrapping_add({val(a[3],pc)});'
  elif base=='mul':code=f'{d}={val(a[1],pc)}.wrapping_mul({val(a[2],pc)});'
+ elif base=='muls':code=f'{d}={val(a[1],pc)}.wrapping_mul({val(a[2],pc)});m.nz({d});'
+ elif base=='bic':
+  v=val(a[2],pc)
+  if len(a)==4:v=f'({shifted(v,a[3])})'
+  code=f'{d}={val(a[1],pc)}&!{v};'
  elif base=='cmp':
   rhs=val(a[1],pc)
   if len(a)==3:rhs=shifted(rhs,a[2])
@@ -158,6 +168,19 @@ def translate(pc,op,args,nextpc,loop_guard=None):
    code+=''.join(f'm.c.regs[{r}]=w{i};' for i,r in enumerate(regs) if r!=15)
    if base=='pop':code+=f'm.c.regs[13]=addr.wrapping_add({len(regs)*4});'
    if 15 in regs:code+=f'let dest=w{regs.index(15)};m.c.cpsr=(m.c.cpsr & !32)|((dest&1)<<5);m.c.regs[15]=dest&!1;return Some(());'
+ elif base=='stm':
+  regs=[reg[x.strip()] for x in args.split('{')[1].rstrip('}').split(',')]
+  assert a[0] in reg and reg[a[0]] not in regs and 15 not in regs and sorted(regs)==regs  # no write-back
+  code=f'm.a.push_words({val(a[0],pc)},&['+','.join(f'm.c.regs[{r}]' for r in regs)+'])?;'
+ elif base in ('vst1.64','vld1.64'):
+  ds=[int(x.strip()[1:]) for x in args.split('}')[0].lstrip('{').split(',')];rn=args.split('[')[1].split(':')[0].rstrip(']')
+  assert args.endswith(']') and ds==list(range(ds[0],ds[0]+len(ds)))  # no write-back; alignment is unchecked, as in the interpreter
+  words=[2*ds[0]+i for i in range(2*len(ds))]
+  if base=='vst1.64':code=f'm.a.push_words({val(rn,pc)},&['+','.join(f'm.c.extregs[{w}]' for w in words)+'])?;'
+  else:code=f'let addr={val(rn,pc)};'+''.join(f'let w{i}=m.a.read(addr.wrapping_add({4*i}),4)?;' for i in range(len(words)))+''.join(f'm.c.extregs[{w}]=w{i};' for i,w in enumerate(words))
+ elif base=='ldr' and args.endswith('!'):
+  f=re.fullmatch(r'(\w+), \[(\w+), (#-?\w+)\]!',args);assert f and f[1]!=f[2] and 'pc' not in (f[1],f[2])
+  code=f'let addr={val(f[2],pc)}.wrapping_add({val(f[3],pc)});{dest(f[1])}=m.a.read(addr,4)?;{dest(f[2])}=addr;'
  elif args.endswith('[sp, #-4]!') and base=='str':
   code=f'let addr=m.c.regs[13].wrapping_sub(4);m.a.write(addr,4,{d})?;m.c.regs[13]=addr;'
  elif args.endswith('[sp], #4') and base=='ldr':

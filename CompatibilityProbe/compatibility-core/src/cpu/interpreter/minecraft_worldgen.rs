@@ -29,8 +29,9 @@ const MESH_INDEX: usize = FRONTIER_INDEX + 1;
 const BLOCK_COUNT: usize = MESH_INDEX + 1;
 const DISPATCH_PCS:&[u32]=&[0x1a002c,0x1a0062,0x6e414,0xad2b4,0x25b1c,0xbf294,0xbf310,0x1a3828,0x1a3858,0x19ffb8,0x4fb92,0x1947b8,0x12d924,0x48214,0x482b2,0x25b32,0x47b08,0x47b44,0x483aa,0x483c6,0x483e2,0x483fe,0x48418,0x48430,0x4e55a,0x176d70,0x1642c2,0x1767a8,0x1767e4,0x176804,super::minecraft_queue::OBSERVE,super::minecraft_queue::SELECT,0x176f9c,0x91cc6,0x91ad4,0x91ad8,0x994c8,mesh::ENTRY,FRONTIER_SEED];
 const DISPATCH_LEN:usize={
-    let mut max=FRONTIER_SEED;let mut i=0;
-    while i<super::minecraft_loading::BLOCKS.len(){let pc=super::minecraft_loading::BLOCKS[i].0;if pc>max{max=pc;}i+=1;}
+    let mut max=0;let mut i=0;
+    while i<DISPATCH_PCS.len(){if DISPATCH_PCS[i]>max{max=DISPATCH_PCS[i];}i+=1;}
+    i=0;while i<super::minecraft_loading::BLOCKS.len(){let pc=super::minecraft_loading::BLOCKS[i].0;if pc>max{max=pc;}i+=1;}
     ((max as usize)>>7)+1
 };
 const fn dispatch_words()->[u64;DISPATCH_LEN]{
@@ -39,6 +40,14 @@ const fn dispatch_words()->[u64;DISPATCH_LEN]{
     i=0;while i<super::minecraft_loading::BLOCKS.len(){let pc=super::minecraft_loading::BLOCKS[i].0;words[(pc>>7) as usize]|=1u64<<((pc>>1)&63);i+=1;}words
 }
 static DISPATCH:[u64;DISPATCH_LEN]=dispatch_words();
+// Chained islands skip the dispatcher, so no island may start at a PC that
+// it routes elsewhere or that the bitmap test excludes.
+const _:()={
+    let mut i=0;while i<super::minecraft_loading::BLOCKS.len(){
+        let pc=super::minecraft_loading::BLOCKS[i].0;assert!(pc>=0x1bd38);
+        let mut j=0;while j<DISPATCH_PCS.len(){assert!(DISPATCH_PCS[j]!=pc);j+=1;}i+=1;
+    }
+};
 #[inline(always)] fn native_entry(pc:u32)->bool{
     pc>=0x1bd38 && (pc>>7)<DISPATCH_LEN as u32 && DISPATCH[(pc>>7) as usize]&(1u64<<((pc>>1)&63))!=0
 }
@@ -60,11 +69,17 @@ pub(super) struct State {
     shadow_only: bool,
     light_fallback: [u64; 8],
     census: Option<Box<Census>>,
+    // Retired instructions in finished batches.
+    retired: u64,
+    window: Option<Box<Window>>,
     #[cfg(test)] fault: bool,
+    #[cfg(test)] single_island: bool,
 }
 impl Default for State {
-    fn default()->Self {Self {enabled:false,neighbors_enabled:true,hot_loops_enabled:true,frontier_enabled:true,queue:None,chunk_trace:false,mesh_native:true,loading_enabled:true,terrain_enabled:true,streaming_enabled:true,calls:[0;BLOCK_COUNT],checked:[0;BLOCK_COUNT],fast:[0;BLOCK_COUNT],disabled:[false;BLOCK_COUNT],shadow_only:false,light_fallback:[0;8],census:None,#[cfg(test)]fault:false}}
+    fn default()->Self {Self {enabled:false,neighbors_enabled:true,hot_loops_enabled:true,frontier_enabled:true,queue:None,chunk_trace:false,mesh_native:true,loading_enabled:true,terrain_enabled:true,streaming_enabled:true,calls:[0;BLOCK_COUNT],checked:[0;BLOCK_COUNT],fast:[0;BLOCK_COUNT],disabled:[false;BLOCK_COUNT],shadow_only:false,light_fallback:[0;8],census:None,retired:0,window:None,#[cfg(test)]fault:false,#[cfg(test)]single_island:false}}
 }
+// Counter snapshot for the five-second native coverage event.
+struct Window { next:u64, last:std::time::Instant, retired:u64, calls:[u64;BLOCK_COUNT], checked:[u64;BLOCK_COUNT], fast:[u64;BLOCK_COUNT] }
 #[derive(Default)]
 struct Census { remaining:u32, random:u32, samples:u64, pcs:std::collections::BTreeMap<u32,u64> }
 impl Census {
@@ -109,6 +124,8 @@ impl InterpreterCpu {
             streaming_enabled: std::env::var("MINECRAFT_NATIVE_STREAMING").as_deref()!=Ok("0"),
             census: self.pc_sampling.as_ref().filter(|_|std::env::var("MINECRAFT_CENSUS").as_deref()==Ok("1")).map(|_|Box::new(Census{remaining:1024,random:0xabcdef01,..Census::default()})),
             shadow_only: std::env::var("MINECRAFT_WORLDGEN_SHADOW_ONLY").as_deref() == Ok("1"),
+            // MINECRAFT_PROFILE runs turn on diagnostics and guest PC sampling together.
+            window: crate::diagnostics::pc_sampling_enabled().then(||Box::new(Window{next:0,last:std::time::Instant::now(),retired:0,calls:[0;BLOCK_COUNT],checked:[0;BLOCK_COUNT],fast:[0;BLOCK_COUNT]})),
             ..State::default()
         };
         if let Some(planner) = self.minecraft_worldgen.queue.as_mut() {
@@ -589,20 +606,10 @@ impl InterpreterCpu {
     // Broader profiled islands around the original noise, ore and lighting
     // operations. Predictions record writes transactionally, including aliases.
     fn minecraft_loading(&mut self,mem:&mut Mem,budget:u64)->Option<(CpuState,u64)> {
-        if !self.minecraft_worldgen.loading_enabled{return None;}
         use super::minecraft_loading as loading;
         use crate::pipeline_native::{Machine,Predict,Outcome};
-        let which=loading::entry_index(self.regs[PC])?;
-        if which >= 90 && !self.minecraft_worldgen.mesh_native {return None;}
-        if which>=78 && !self.minecraft_worldgen.neighbors_enabled {return None;}
-        if which>=62 && !self.minecraft_worldgen.hot_loops_enabled {return None;}
-        if which>=48&&!self.minecraft_worldgen.frontier_enabled{return None;}
-        if which>=9&&!self.minecraft_worldgen.terrain_enabled{return None;}
-        if which>=29&&!self.minecraft_worldgen.streaming_enabled{return None;}
-        let (lo,hi,max,code)=loading::BLOCKS[which];let index=36+which;
-        if budget<max||self.minecraft_worldgen.disabled[index]||!self.is_thumb()
-            ||self.in_it_block()||self.excl_addr.is_some()
-            ||mem.get_bytes_fallible(Ptr::from_bits(lo),code.len() as u32)?!=code{return None;}
+        let which=self.loading_island(mem,budget)?;
+        let (lo,hi,_,_)=loading::BLOCKS[which];let index=36+which;
         let context=crate::cpu::CpuContext{regs:self.regs,extregs:self.extregs,cpsr:self.cpsr,fpscr:self.fpscr};
         self.minecraft_worldgen.calls[index]+=1;let s=&self.minecraft_worldgen;
         if s.checked[index]<128||s.calls[index]%4096==0||s.shadow_only {
@@ -619,16 +626,50 @@ impl InterpreterCpu {
             }else{self.minecraft_worldgen.disabled[index]=true;report("disabled_after_mismatch",index,self.minecraft_worldgen.calls[index]);}
             Some((state,retired))
         }else{
-            // Keep repeated loop iterations in one native context, but stop before
-            // the next scheduled shadow check and at the original guest budget.
-            let max_visits=(4096-self.minecraft_worldgen.calls[index]%4096).min(64);
-            let (c,used,visits)=loading::fast_batch(mem,context,which,budget.min(16384),max_visits);
-            self.minecraft_worldgen.calls[index]+=visits.saturating_sub(1);
-            self.regs=c.regs;self.extregs=c.extregs;self.cpsr=c.cpsr;self.fpscr=c.fpscr;
-            if used==0{return None;}
-            self.minecraft_worldgen.fast[index]+=used;if self.minecraft_worldgen.fast[index]==used{report("native_loading_enabled",index,used);}
+            let mut used=self.loading_fast(mem,which,budget)?;
+            #[cfg(test)] if self.minecraft_worldgen.single_island {return Some((CpuState::Normal,used));}
+            // Continue into the next island exactly as the dispatcher would at
+            // that PC, but only while it is also due a fast visit; a shadow
+            // visit or a failed guard goes back through the dispatcher.
+            while let Some(which)=self.loading_island(mem,budget-used) {
+                let index=36+which;let s=&self.minecraft_worldgen;
+                if s.checked[index]<128||(s.calls[index]+1)%4096==0||s.shadow_only{break;}
+                self.minecraft_worldgen.calls[index]+=1;
+                let Some(more)=self.loading_fast(mem,which,budget-used) else {self.minecraft_worldgen.calls[index]-=1;break};
+                used+=more;
+            }
             Some((CpuState::Normal,used))
         }
+    }
+    fn loading_island(&self,mem:&Mem,budget:u64)->Option<usize> {
+        use super::minecraft_loading as loading;
+        let s=&self.minecraft_worldgen;
+        if !s.loading_enabled{return None;}
+        let which=loading::entry_index(self.regs[PC])?;
+        if which >= 90 && !s.mesh_native {return None;}
+        if which>=78 && !s.neighbors_enabled {return None;}
+        if which>=62 && !s.hot_loops_enabled {return None;}
+        if which>=48&&!s.frontier_enabled{return None;}
+        if which>=9&&!s.terrain_enabled{return None;}
+        if which>=29&&!s.streaming_enabled{return None;}
+        let (lo,_,max,code)=loading::BLOCKS[which];
+        if budget<max||s.disabled[36+which]||!self.is_thumb()
+            ||self.in_it_block()||self.excl_addr.is_some()
+            ||mem.get_bytes_fallible(Ptr::from_bits(lo),code.len() as u32)?!=code{return None;}
+        Some(which)
+    }
+    // Keep repeated loop iterations in one native context, but stop before
+    // the next scheduled shadow check and at the original guest budget.
+    fn loading_fast(&mut self,mem:&mut Mem,which:usize,budget:u64)->Option<u64> {
+        let index=36+which;
+        let context=crate::cpu::CpuContext{regs:self.regs,extregs:self.extregs,cpsr:self.cpsr,fpscr:self.fpscr};
+        let max_visits=(4096-self.minecraft_worldgen.calls[index]%4096).min(64);
+        let (c,used,visits)=super::minecraft_loading::fast_batch(mem,context,which,budget.min(16384),max_visits);
+        self.minecraft_worldgen.calls[index]+=visits.saturating_sub(1);
+        self.regs=c.regs;self.extregs=c.extregs;self.cpsr=c.cpsr;self.fpscr=c.fpscr;
+        if used==0{return None;}
+        self.minecraft_worldgen.fast[index]+=used;if self.minecraft_worldgen.fast[index]==used{report("native_loading_enabled",index,used);}
+        Some(used)
     }
     // Ore feature's inner distance/rejection loop. Preserve the guest's f32
     // rounding sequence and FPSCR comparison flags; accepted cells return to
@@ -1009,47 +1050,51 @@ impl InterpreterCpu {
     }
     #[inline(always)]
     pub(super) fn run_minecraft_batch(&mut self, mem: &mut Mem, budget: &mut u64) -> CpuState {
-        if self.minecraft_worldgen.census.is_some(){self.run_minecraft_batch_inner::<true>(mem,budget)}
-        else{self.run_minecraft_batch_inner::<false>(mem,budget)}
+        let start=*budget;
+        let state=if self.minecraft_worldgen.census.is_some(){self.run_minecraft_batch_inner::<true>(mem,budget)}
+        else{self.run_minecraft_batch_inner::<false>(mem,budget)};
+        let s=&mut self.minecraft_worldgen;s.retired=s.retired.wrapping_add(start-*budget);
+        if s.window.as_ref().is_some_and(|w|s.retired>=w.next){self.native_window();}
+        state
     }
     #[inline(always)]
     fn run_minecraft_batch_inner<const CENSUS:bool>(&mut self,mem:&mut Mem,budget:&mut u64)->CpuState {
         loop {
-            // Keep the cold prediction/validation call out of ordinary guest
-            // instructions; a call on every instruction erases much of the gain.
-            let translated = if !native_entry(self.regs[PC]) {None} else if matches!(self.regs[PC], 0x1a002c | 0x1a0062) {
-                self.minecraft_twist(mem, *budget)
-            } else if self.regs[PC] == mesh::ENTRY {
-                self.minecraft_mesh_fill(mem, *budget)
-            } else if matches!(self.regs[PC], 0x6e414 | 0xad2b4 | FRONTIER_SEED) {
-                self.minecraft_seed(mem, *budget)
-            } else if self.regs[PC] == 0x25b1c {
-                self.minecraft_empty_rect(mem, *budget)
-            } else if self.regs[PC] == 0xbf294 {
-                self.minecraft_light_lookup(mem, *budget).or_else(||self.minecraft_light_prefix(mem,*budget))
-            } else if matches!(self.regs[PC],0x1a3828|0x1a3858) {
-                self.minecraft_fill(mem,*budget)
-            } else if self.regs[PC]==0x19ffb8 {
-                self.minecraft_random(mem,*budget)
-            } else if self.regs[PC]==0xbf310 {
-                self.minecraft_light_tail(mem,*budget)
-            } else if self.regs[PC]==super::minecraft_noise::ENTRY {
-                self.minecraft_noise(mem,*budget)
-            } else if self.regs[PC]==0x1947b8 {
-                self.minecraft_ore(mem,*budget)
-            } else if self.regs[PC]==0x12d924 {
-                self.minecraft_chunk_grid(mem,*budget)
-            } else if matches!(self.regs[PC],0x48214|0x482b2) {
-                self.minecraft_cached_cell(mem,*budget)
-            } else if self.regs[PC]==0x25b32 {
-                self.minecraft_byte_scan(mem,*budget)
-            } else if matches!(self.regs[PC],0x47b08|0x47b44) {
-                self.minecraft_column(mem,*budget)
-            } else if matches!(self.regs[PC],0x483aa|0x483c6|0x483e2|0x483fe|0x48418|0x48430) {
-                self.minecraft_neighbors(mem,*budget)
-            } else if self.regs[PC]==0x4e55a {
-                self.minecraft_surface(mem,*budget)
-            } else if matches!(self.regs[PC],0x176f9c|0x91cc6) {
+            // Only the bitmap test stays in the per-instruction loop; every
+            // native entry, observer and hook sits behind one cold call.
+            let translated=if native_entry(self.regs[PC]) {self.minecraft_native(mem,*budget)} else {None};
+            let (state, used) = translated.unwrap_or_else(|| {
+                if CENSUS {self.minecraft_worldgen.census.as_mut().unwrap().sample(self.regs[PC]);}
+                (self.step_one(mem), 1)
+            });
+            *budget = budget.saturating_sub(used);
+            match state {
+                CpuState::Normal if *budget > 0 => (),
+                other => return other,
+            }
+        }
+    }
+    #[cold]
+    #[inline(never)]
+    fn minecraft_native(&mut self,mem:&mut Mem,budget:u64)->Option<(CpuState,u64)> {
+        match self.regs[PC] {
+            0x1a002c|0x1a0062=>self.minecraft_twist(mem,budget),
+            mesh::ENTRY=>self.minecraft_mesh_fill(mem,budget),
+            0x6e414|0xad2b4|FRONTIER_SEED=>self.minecraft_seed(mem,budget),
+            0x25b1c=>self.minecraft_empty_rect(mem,budget),
+            0xbf294=>self.minecraft_light_lookup(mem,budget).or_else(||self.minecraft_light_prefix(mem,budget)),
+            0x1a3828|0x1a3858=>self.minecraft_fill(mem,budget),
+            0x19ffb8=>self.minecraft_random(mem,budget),
+            0xbf310=>self.minecraft_light_tail(mem,budget),
+            super::minecraft_noise::ENTRY=>self.minecraft_noise(mem,budget),
+            0x1947b8=>self.minecraft_ore(mem,budget),
+            0x12d924=>self.minecraft_chunk_grid(mem,budget),
+            0x48214|0x482b2=>self.minecraft_cached_cell(mem,budget),
+            0x25b32=>self.minecraft_byte_scan(mem,budget),
+            0x47b08|0x47b44=>self.minecraft_column(mem,budget),
+            0x483aa|0x483c6|0x483e2|0x483fe|0x48418|0x48430=>self.minecraft_neighbors(mem,budget),
+            0x4e55a=>self.minecraft_surface(mem,budget),
+            0x176f9c|0x91cc6=>{
                 if self.minecraft_worldgen.chunk_trace {
                     let gen=self.regs[PC]==0x176f9c;
                     let ptr=self.regs[if gen{4}else{11}];
@@ -1062,22 +1107,30 @@ impl InterpreterCpu {
                     }
                 }
                 None
-            } else if matches!(self.regs[PC],super::minecraft_queue::OBSERVE|super::minecraft_queue::SELECT|0x91ad4|0x91ad8|0x994c8) {
-                self.queue_point(mem); None
-            } else if matches!(self.regs[PC],0x176d70|0x1642c2|0x1767a8|0x1767e4|0x176804) {
+            }
+            super::minecraft_queue::OBSERVE|super::minecraft_queue::SELECT|0x91ad4|0x91ad8|0x994c8=>{self.queue_point(mem);None}
+            0x176d70|0x1642c2|0x1767a8|0x1767e4|0x176804=>{
                 if self.minecraft_worldgen.chunk_trace {self.trace_chunk_transition(mem);}
                 None
-            } else { self.minecraft_loading(mem,*budget) };
-            let (state, used) = translated.unwrap_or_else(|| {
-                if CENSUS {self.minecraft_worldgen.census.as_mut().unwrap().sample(self.regs[PC]);}
-                (self.step_one(mem), 1)
-            });
-            *budget = budget.saturating_sub(used);
-            match state {
-                CpuState::Normal if *budget > 0 => (),
-                other => return other,
             }
+            _=>self.minecraft_loading(mem,budget),
         }
+    }
+    // Per-block deltas every five seconds of diagnostics. `fast` counts native
+    // calls for whole-call kernels and retired instructions for batched ones.
+    #[cold]
+    fn native_window(&mut self) {
+        let s=&mut self.minecraft_worldgen;let Some(w)=s.window.as_mut() else {return};
+        w.next=s.retired.wrapping_add(1<<22);
+        let elapsed=w.last.elapsed().as_secs_f64();if elapsed<5.0{return;}
+        let mut blocks=Vec::new();
+        for i in 0..BLOCK_COUNT {
+            let (calls,fast,checked)=(s.calls[i].wrapping_sub(w.calls[i]),s.fast[i].wrapping_sub(w.fast[i]),s.checked[i].wrapping_sub(w.checked[i]));
+            if calls|fast|checked!=0||s.disabled[i] {blocks.push(format!("[{i},{calls},{fast},{checked},{}]",u8::from(s.disabled[i])));}
+        }
+        crate::diagnostics::event(&format!("{{\"event\":\"minecraft_native_window\",\"duration_s\":{elapsed:.3},\"retired\":{},\"blocks\":[{}]}}",
+            s.retired.wrapping_sub(w.retired),blocks.join(",")));
+        w.last=std::time::Instant::now();w.retired=s.retired;w.calls=s.calls;w.checked=s.checked;w.fast=s.fast;
     }
 }
 
@@ -1181,6 +1234,165 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // release timing; run explicitly
+    fn minecraft_dispatch_loop_release_benchmark() {
+        // adds/eors/subs/bne at a main-image PC with no native entry, so this
+        // times only the bitmap test, step_one and the budget check.
+        let (mut mem,mut cpu,_,_)=fixture();let pc=0x30000;
+        mem.get_bytes_fallible_mut(Ptr::from_bits(pc),8).unwrap().copy_from_slice(&[0x01,0x30,0x41,0x40,0x01,0x3a,0xfb,0xd1]);
+        cpu.minecraft_worldgen.enabled=true;
+        for _ in 0..3 {
+            cpu.regs=[0;16];cpu.regs[2]=u32::MAX;cpu.regs[PC]=pc;cpu.cpsr=0x30;
+            let start=std::time::Instant::now();let mut total=0u64;
+            for _ in 0..400 {let mut budget=100_000;assert!(matches!(cpu.run_minecraft_batch(&mut mem,&mut budget),CpuState::Normal));total+=100_000-budget;}
+            assert_eq!((total,cpu.regs[0]),(40_000_000,10_000_000));
+            eprintln!("dispatch loop retired={total} ns_per_instruction={:.3}",start.elapsed().as_secs_f64()*1e9/total as f64);
+        }
+    }
+
+    #[test]
+    fn minecraft_probe_tessellator_vertex_differential() {
+        // Whole Tessellator::vertex calls through the dispatcher against the
+        // interpreter alone: first an exact budget that stops at a varying
+        // point, then spare budget up to an ARM SVC at the return address.
+        // Covers chained islands, the zero-fill kernel and both visit kinds.
+        use super::super::minecraft_loading as loading;
+        let (mut mem,mut cpu,_,_)=fixture();
+        for &(lo,_,_,code) in loading::BLOCKS {mem.get_bytes_fallible_mut(Ptr::from_bits(lo),code.len() as u32).unwrap().copy_from_slice(code);}
+        let ret=0x30000u32;mem.write(Ptr::<u32,true>::from_bits(ret),0xef000000);
+        let base=mem.alloc(0x20000).to_bits();let owner=base+0x1000;let buffer=base+0x8000;let sp=base+0x18000;
+        let put=|mem:&mut Mem,a:u32,v:u32|mem.write(Ptr::<u32,true>::from_bits(a),v);
+        let region=|mem:&Mem|mem.get_bytes_fallible(Ptr::from_bits(base),0x20000).unwrap().to_vec();
+        cpu.minecraft_worldgen.enabled=true;
+        for n in 0..3000u32 {
+            mem.get_bytes_fallible_mut(Ptr::from_bits(base),0x20000).unwrap().fill(0);
+            let (uv,color,normal)=(n&1!=0,n&2!=0,n&4!=0);
+            let stride=12+8*u32::from(uv)+4*u32::from(color)+4*u32::from(normal);
+            let offsets=[0,if uv {12} else {255},if color {12+8*u32::from(uv)} else {255},if normal {stride-4} else {255}];
+            let count=(n/8)%64;let end=buffer+stride*count;
+            put(&mut mem,owner+0x18,buffer);put(&mut mem,owner+0x1c,end);put(&mut mem,owner+0x20,end+stride*(1+n%3));
+            put(&mut mem,owner+0xb8,count);put(&mut mem,owner+0xbc,n);put(&mut mem,owner+0x14,owner+0x200);
+            mem.write(Ptr::<u8,true>::from_bits(owner+0x204),stride as u8);
+            for (k,&o) in offsets.iter().enumerate() {mem.write(Ptr::<u8,true>::from_bits(owner+0x30+k as u32),o as u8);}
+            mem.write(Ptr::<u8,true>::from_bits(owner+0x34),stride as u8);
+            if count>0 {
+                // Pointers into the previous vertex, advanced incrementally.
+                let last=end-stride;put(&mut mem,owner+4,last);
+                for (k,off) in [(1,8),(2,0xc),(3,0x10)] {if offsets[k]!=255 {put(&mut mem,owner+off,last+offsets[k]);}}
+            }
+            for i in 0..13 {put(&mut mem,owner+0x3c+i*4,((n as i32%23-11+i as i32) as f32/5.0).to_bits());}
+            for i in 0..4 {put(&mut mem,owner+0x60+i*4,n.wrapping_mul(0x9e3779b9).rotate_left(i));}
+            cpu.regs=std::array::from_fn(|i|n.wrapping_mul(0x91abcdef).rotate_left(i as u32));
+            cpu.regs[0]=owner;cpu.regs[13]=sp;cpu.regs[14]=ret;cpu.regs[PC]=0x3999c;cpu.cpsr=(n<<28)|0x30;cpu.fpscr=0;
+            for i in 0..64 {cpu.extregs[i]=(((n+i as u32)%29) as f32/7.0-2.0).to_bits();}
+            let (regs,extregs,cpsr)=(cpu.regs,cpu.extregs,cpu.cpsr);
+            let original=region(&mem);
+            let mut steps=0u64;let split=1+u64::from(n.wrapping_mul(7919))%340;let mut middle=None;
+            loop {
+                if steps==split {middle=Some((cpu.regs,cpu.extregs,cpu.cpsr,region(&mem)));}
+                if cpu.regs[PC]==ret {break;}
+                assert!(matches!(cpu.step_one(&mut mem),CpuState::Normal));steps+=1;
+            }
+            let expected=(cpu.regs,cpu.extregs,cpu.cpsr,region(&mem));
+            mem.get_bytes_fallible_mut(Ptr::from_bits(base),0x20000).unwrap().copy_from_slice(&original);
+            cpu.regs=regs;cpu.extregs=extregs;cpu.cpsr=cpsr;cpu.fpscr=0;
+            let done=if middle.is_some() {split} else {0};
+            if let Some(middle)=middle {
+                let mut budget=split;assert!(matches!(cpu.run_minecraft_batch(&mut mem,&mut budget),CpuState::Normal));
+                assert_eq!(budget,0);assert!((cpu.regs,cpu.extregs,cpu.cpsr,region(&mem))==middle,"split {split} case {n}");
+            }
+            let mut budget=1000;assert!(matches!(cpu.run_minecraft_batch(&mut mem,&mut budget),CpuState::Svc(0)));
+            assert_eq!(1000-budget,steps-done+1,"case {n}");
+            assert_eq!(cpu.regs[PC],ret+4);cpu.regs[PC]=ret;
+            assert_eq!(cpu.regs,expected.0,"case {n}");assert_eq!(cpu.extregs,expected.1,"case {n}");assert_eq!(cpu.cpsr,expected.2,"case {n}");
+            assert!(region(&mem)==expected.3,"memory case {n}");
+        }
+        for which in 96..102 {
+            let i=36+which;let s=&cpu.minecraft_worldgen;
+            assert!(!s.disabled[i]&&s.fast[i]>0,"island {which}");
+        }
+    }
+
+    #[test]
+    fn minecraft_probe_loading_chain_counters() {
+        // Chaining must leave every counter where the dispatcher alone would,
+        // across the 4096th-visit shadow checks it hands back, and when a
+        // chained island declines: last, __append's push faults below 0x4000.
+        use super::super::minecraft_loading as loading;
+        let mut results=Vec::new();let mut depth=None;
+        for single in [None,Some(false),Some(true)] {
+            let (mut mem,mut cpu,_,_)=fixture();
+            for &(lo,_,_,code) in loading::BLOCKS {mem.get_bytes_fallible_mut(Ptr::from_bits(lo),code.len() as u32).unwrap().copy_from_slice(code);}
+            let ret=0x30000u32;mem.write(Ptr::<u32,true>::from_bits(ret),0xef000000);
+            let base=mem.alloc(0x100000).to_bits();let owner=base+0x1000;let buffer=base+0x10000;let sp=base+0x8000;
+            let put=|mem:&mut Mem,a:u32,v:u32|mem.write(Ptr::<u32,true>::from_bits(a),v);
+            put(&mut mem,owner+0x18,buffer);put(&mut mem,owner+0x1c,buffer);put(&mut mem,owner+0x20,base+0xf0000);put(&mut mem,owner+0x14,owner+0x200);
+            mem.write(Ptr::<u8,true>::from_bits(owner+0x204),28);
+            for (k,o) in [0u8,12,20,24,28].into_iter().enumerate() {mem.write(Ptr::<u8,true>::from_bits(owner+0x30+k as u32),o);}
+            for i in 0..13 {put(&mut mem,owner+0x3c+i*4,(i as f32/4.0+1.0).to_bits());}
+            let Some(single)=single else {
+                // Interpreted, for the stack depth at __append's entry.
+                cpu.regs[0]=owner;cpu.regs[13]=sp;cpu.regs[14]=ret;cpu.regs[PC]=0x3999c;cpu.cpsr=0x30;
+                while cpu.regs[PC]!=0x1a37d0 {assert!(matches!(cpu.step_one(&mut mem),CpuState::Normal));}
+                depth=Some(sp-cpu.regs[13]);continue;
+            };
+            cpu.minecraft_worldgen=State{enabled:true,single_island:single,..State::default()};
+            for n in 0..5001u32 {
+                cpu.regs[0]=owner;cpu.regs[13]=if n<5000 {sp} else {0x4004+depth.unwrap()};cpu.regs[14]=ret;cpu.regs[PC]=0x3999c;cpu.cpsr=0x30;
+                for i in 0..3 {cpu.extregs[i]=((n%97+i as u32) as f32).to_bits();}
+                let mut budget=100_000;let state=cpu.run_minecraft_batch(&mut mem,&mut budget);
+                // The interpreter replays the push and faults on it.
+                assert!(if n<5000 {matches!(state,CpuState::Svc(0))} else {matches!(state,CpuState::Error(_))&&cpu.regs[PC]==0x1a37d2},"{n}");
+            }
+            let s=&cpu.minecraft_worldgen;
+            assert!(s.calls[36+96..36+102].iter().all(|&c|c>4096),"{:?}",&s.calls[36+96..36+102]);
+            results.push((s.calls,s.checked,s.fast,s.disabled,s.retired,cpu.regs,mem.get_bytes_fallible(Ptr::from_bits(base),0x100000).unwrap().to_vec()));
+        }
+        assert!(results[0]==results[1]);
+    }
+
+    #[test]
+    #[ignore] // release timing; run explicitly
+    fn minecraft_tessellator_vertex_release_benchmark() {
+        // 100k appends of a position/uv/color/normal vertex: interpreted, then
+        // through the dispatcher with only the store tail and zero fill native
+        // (islands 96-101 off), then with every island and chaining. Each call
+        // returns to an ARM SVC, as a quantum's budget is rarely the limit.
+        use super::super::minecraft_loading as loading;
+        let (mut mem,mut cpu,_,_)=fixture();
+        for &(lo,_,_,code) in loading::BLOCKS {mem.get_bytes_fallible_mut(Ptr::from_bits(lo),code.len() as u32).unwrap().copy_from_slice(code);}
+        let ret=0x30000u32;mem.write(Ptr::<u32,true>::from_bits(ret),0xef000000);
+        let base=mem.alloc(0x400000).to_bits();let owner=base+0x1000;let buffer=base+0x10000;let sp=base+0x8000;
+        let mut expected=None;
+        for mode in [0,1,2,2,1,0] {
+            mem.get_bytes_fallible_mut(Ptr::from_bits(base),0x400000).unwrap().fill(0);
+            let put=|mem:&mut Mem,a:u32,v:u32|mem.write(Ptr::<u32,true>::from_bits(a),v);
+            put(&mut mem,owner+0x18,buffer);put(&mut mem,owner+0x1c,buffer);put(&mut mem,owner+0x20,base+0x3f0000);put(&mut mem,owner+0x14,owner+0x200);
+            mem.write(Ptr::<u8,true>::from_bits(owner+0x204),28);
+            for (k,o) in [0u8,12,20,24,28].into_iter().enumerate() {mem.write(Ptr::<u8,true>::from_bits(owner+0x30+k as u32),o);}
+            for i in 0..13 {put(&mut mem,owner+0x3c+i*4,(i as f32/4.0+1.0).to_bits());}
+            cpu.minecraft_worldgen=State{enabled:mode>0,..State::default()};
+            if mode==1 {cpu.minecraft_worldgen.disabled[36+96..36+102].fill(true);}
+            let start=std::time::Instant::now();let mut total=0;
+            for n in 0..100_000u32 {
+                cpu.regs[0]=owner;cpu.regs[13]=sp;cpu.regs[14]=ret;cpu.regs[PC]=0x3999c;cpu.cpsr=0x30;
+                for i in 0..3 {cpu.extregs[i]=((n%97+i as u32) as f32).to_bits();}
+                if mode>0 {
+                    let mut budget=100_000;assert!(matches!(cpu.run_minecraft_batch(&mut mem,&mut budget),CpuState::Svc(0)));total+=99_999-budget;
+                } else {
+                    while cpu.regs[PC]!=ret {assert!(matches!(cpu.step_one(&mut mem),CpuState::Normal));total+=1;}
+                    cpu.regs[PC]+=4;
+                }
+                assert_eq!(cpu.regs[PC],ret+4);
+            }
+            let seconds=start.elapsed().as_secs_f64();
+            let bytes=mem.get_bytes_fallible(Ptr::from_bits(base),0x400000).unwrap().to_vec();
+            if let Some(w)=&expected {assert!(&bytes==w);}else{expected=Some(bytes);}
+            eprintln!("vertex mode={mode} calls=100000 retired={total} ns_per_call={:.1}",seconds*1e4);
+        }
+    }
+
+    #[test]
     fn minecraft_probe_loading_partial_progress() {
         use super::super::minecraft_loading as loading;
         let(mut mem,mut cpu,_,_)=fixture();let base=mem.alloc(4096).to_bits();
@@ -1251,7 +1463,7 @@ mod tests {
         let put=|mem:&mut Mem,a:u32,v:u32|mem.write(Ptr::<u32,true>::from_bits(a),v);
         mem.get_bytes_fallible_mut(Ptr::from_bits(0x213028),4096).unwrap()
             .copy_from_slice(&super::super::minecraft_crc::TABLES);
-        let mut counts=[0;loading::BLOCKS.len()];
+        let mut counts=[0;loading::BLOCKS.len()];cpu.minecraft_worldgen.single_island=true;
         for which in 0..loading::BLOCKS.len() {for n in 0..1024u32 {
             mem.get_bytes_fallible_mut(Ptr::from_bits(base),0x20000).unwrap().fill(0);
             cpu.regs.fill(base);cpu.regs[13]=sp;cpu.regs[15]=loading::BLOCKS[which].0;
@@ -1454,6 +1666,32 @@ mod tests {
                     cpu.regs[4]=n&1;put(&mut mem,sp+52,0x2011+n%4);
                 }
                 89 => {cpu.regs[0]=owner;cpu.regs[1]=chunk;mem.write(Ptr::<u8,true>::from_bits(0x28b600+0x2f4),(n%2) as u8);}
+                96|97 => {
+                    // Tessellator: grow, equal, shrink and reserve requests,
+                    // missing attributes, incremental or recomputed pointers.
+                    let stride=n%40;let count=n%50;let size=(n*7)%300;let format=owner+0x200;
+                    put(&mut mem,owner+0x18,chunk);put(&mut mem,owner+0x1c,chunk+size);put(&mut mem,owner+0x20,chunk+size+n%64);
+                    put(&mut mem,owner+0x38,if n%5==0 {n%100} else {0});put(&mut mem,owner+0xb8,count);put(&mut mem,owner+0xbc,n);
+                    put(&mut mem,owner+4,if n%3==0 {0} else {chunk+n%24});put(&mut mem,owner+0x14,format);mem.write(Ptr::<u8,true>::from_bits(format+4),(n%32) as u8);
+                    for (k,off) in [8,0xc,0x10].into_iter().enumerate() {put(&mut mem,owner+off,if (n>>k)&1!=0 {chunk+off} else {0});}
+                    for k in 0..4 {mem.write(Ptr::<u8,true>::from_bits(owner+0x30+k),if (n>>(k+1))&1!=0 {0xff} else {((n*3+k)%24) as u8});}
+                    mem.write(Ptr::<u8,true>::from_bits(owner+0x34),stride as u8);mem.write(Ptr::<u8,true>::from_bits(owner+0x70),u8::from(n%7==0));
+                    cpu.regs[0]=owner;
+                    if which==97 {cpu.regs[4]=owner;cpu.regs[6]=owner+0x18;cpu.regs[10]=owner+0x30;cpu.regs[5]=if n%4==0 {chunk+16} else {chunk};}
+                }
+                98|101 => {
+                    for i in 0..24 {put(&mut mem,sp+i*4,n.wrapping_mul(0x9e3779b9).rotate_left(i));}
+                    // Return address slot: above R7 for the vertex exit, sp+28 for the append exit.
+                    let frame=sp+0x30+(n%4)*8;cpu.regs[7]=frame;
+                    put(&mut mem,if which==98 {frame+4} else {sp+28},0x30000|(n%4));
+                }
+                99 => {
+                    // In place, length error, maximum capacity and doubling.
+                    let vector=owner+0x18;cpu.regs[0]=vector;cpu.regs[1]=if n%9==0 {0x80000000} else {n%64};
+                    put(&mut mem,vector,if n%11==0 {0} else {chunk});put(&mut mem,vector+4,if n%11==0 {0x40000000} else if n%13==0 {0} else {chunk+n%100});
+                    put(&mut mem,vector+8,if n%11==0 {0x40000000} else {chunk+n%100+(n*5)%80});
+                }
+                100 => {}
                 _=>unreachable!()
             }
             let before=crate::cpu::CpuContext{regs:cpu.regs,extregs:cpu.extregs,cpsr:cpu.cpsr,fpscr:cpu.fpscr};
