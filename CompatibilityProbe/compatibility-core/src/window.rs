@@ -350,6 +350,17 @@ impl Window {
             let attr = video_ctx.gl_attr();
             attr.set_context_version(1, 1);
             attr.set_context_profile(sdl2::video::GLProfile::GLES);
+            // SDL's defaults (3/3/2 colour, 16-bit depth, retained backing)
+            // give every UIKit drawable a dithered RGB565 surface plus a depth
+            // buffer the host never uses. The game renders RGBA8 into its own
+            // framebuffers, and each host present redraws the whole drawable.
+            attr.set_red_size(8);
+            attr.set_green_size(8);
+            attr.set_blue_size(8);
+            attr.set_alpha_size(0);
+            attr.set_depth_size(0);
+            attr.set_stencil_size(0);
+            unsafe { sdl2::sys::SDL_GL_SetAttribute(sdl2::sys::SDL_GLattr::SDL_GL_RETAINED_BACKING, 0); }
 
             // Disable blocking of event loop when app is paused.
             sdl2::hint::set("SDL_ANDROID_BLOCK_ON_PAUSE", "0");

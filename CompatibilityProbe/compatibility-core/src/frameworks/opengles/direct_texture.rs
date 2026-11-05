@@ -74,6 +74,15 @@ pub(super) fn before_delete(env:&mut Environment,n:i32,names:ConstPtr<u32>,kind:
  let target=match kind{0=>s.surface.texture,1=>s.surface.framebuffer,_=>s.surface.renderbuffer};
  if n>0&&(0..n as u32).any(|i|env.mem.read(names+i)==target){before_mutation(env,"source_object_delete");}
 }
+/// The owner binding its own main framebuffer cannot alias the source, so
+/// that (per-frame) bind needs no attachment inspection.
+pub(super) fn after_guest_bind(env:&mut Environment,target:u32,framebuffer:u32){
+ let c=current(env);
+ let Some(o)=env.framework_state.opengles.direct.as_ref().filter(|s|target==gl::FRAMEBUFFER_OES&&framebuffer==s.surface.framebuffer&&Some(s.owner)==c).map(|s|s.owner)else{return after_bind(env);};
+ // Still queue earlier native error flags, exactly as after_bind's owner() does.
+ owner(env,o,|_|());
+ env.framework_state.opengles.direct.as_mut().unwrap().surface.bound_framebuffer=framebuffer;
+}
 pub(super) fn after_bind(env:&mut Environment){
  let Some(mut s)=env.framework_state.opengles.direct.take()else{return;};
  let Some(c)=current(env)else{env.framework_state.opengles.direct=Some(s);return;};

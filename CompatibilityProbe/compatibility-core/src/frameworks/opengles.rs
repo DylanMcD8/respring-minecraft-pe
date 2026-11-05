@@ -42,8 +42,8 @@ pub struct State {
 }
 impl State {
     fn current_ctx_for_thread(&mut self, thread: crate::ThreadId) -> &mut Option<crate::objc::id> {
-        self.current_ctxs.entry(thread).or_insert(None);
-        self.current_ctxs.get_mut(&thread).unwrap()
+        // One hash lookup: this runs several times for every guest GL call.
+        self.current_ctxs.entry(thread).or_insert(None)
     }
 }
 

@@ -160,7 +160,13 @@ fn glGetError(env: &mut Environment) -> GLenum {
             log_once!("Warning: Guest error reporting is ignored for glGetError(), returning 0.");
             return 0;
         }
-        log!("Warning: glGetError() returned {:#x}",err);
+        // Some titles poll every frame; keep the first few of each code.
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static LOGGED: [AtomicU32; 8] = [const { AtomicU32::new(0) }; 8];
+        let logged = LOGGED[(err.wrapping_sub(gles11::INVALID_ENUM) as usize).min(7)].fetch_add(1, Ordering::Relaxed);
+        if logged < 16 {
+            log!("Warning: glGetError() returned {:#x}{}", err, if logged == 15 { " (not logged again)" } else { "" });
+        }
     }
     err
 }
@@ -1324,7 +1330,7 @@ fn glBindFramebufferOES(env: &mut Environment, target: GLenum, framebuffer: GLui
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.BindFramebufferOES(target, framebuffer)
     }) ;
-    super::direct_texture::after_bind(env);
+    super::direct_texture::after_guest_bind(env, target, framebuffer);
     super::wrapper_raster::refresh(env);
 }
 fn glBindRenderbufferOES(env: &mut Environment, target: GLenum, renderbuffer: GLuint) {
@@ -1530,6 +1536,11 @@ fn glUnmapBufferOES(env: &mut Environment, target: GLenum) -> GLboolean {
 /// It prevents divisions by zero in levels where fog is used and both
 /// values are set to 10000.
 unsafe fn clamp_fog_state_values(gles: &mut dyn GLES) -> Option<(f32, f32)> {
+    // Apple drivers match the original hardware here, and these queries would
+    // otherwise run on every draw call.
+    if cfg!(any(target_os = "ios", target_os = "macos")) {
+        return None;
+    }
     let mut fogEnabled: GLboolean = 0;
     gles.GetBooleanv(gles11::FOG, &mut fogEnabled);
     if fogEnabled != 0 {
