@@ -39,7 +39,7 @@ bool minecraft_uses_ipad_layout(void) {
 unsigned int minecraft_phone_height(void) {
     if (!phoneHeight) {
         NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-        [defaults registerDefaults:@{@"MinecraftPhoneScreen": @"4", @"FillScreenCropped": @NO, @"ShowFPS": @YES}];
+        [defaults registerDefaults:@{@"MinecraftPhoneScreen": @"4", @"FillScreenCropped": @NO, @"ShowFPS": @YES, @"TerrainProcessing": @"background120"}];
         phoneHeight = [[defaults stringForKey:@"MinecraftPhoneScreen"] isEqualToString:@"3.5"] ? 480 : 568;
         cropToFill = [defaults boolForKey:@"FillScreenCropped"];
         NSLog(@"Minecraft display preferences: height=%u crop=%d", phoneHeight, cropToFill);

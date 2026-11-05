@@ -104,7 +104,7 @@
 		</dict>
 		<dict>
 			<key>DefaultValue</key>
-			<string>background60</string>
+			<string>background120</string>
 			<key>Key</key>
 			<string>TerrainProcessing</string>
 			<key>Title</key>
