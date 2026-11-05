@@ -3,7 +3,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")" && pwd -P)
 repository=$(cd "$root/.." && pwd -P)
 cd "$repository"
-export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 sdk=${1:-iphonesimulator}
 case "$sdk" in
   iphoneos) target=aarch64-apple-ios; platform=ios ;;
