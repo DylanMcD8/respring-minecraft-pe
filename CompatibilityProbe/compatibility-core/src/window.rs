@@ -521,6 +521,18 @@ impl Window {
         Ok(window)
     }
 
+    /// Poll right away, e.g. after the host slept until a guest deadline. That
+    /// deadline is usually the next refresh, whose display-link tick would
+    /// otherwise wait for the next throttled poll.
+    pub fn poll_for_events_now(&mut self, options: &Options) {
+        // Still bounded, in case guest threads sleep in very short steps.
+        if self.last_polled.elapsed() < Duration::from_millis(1) {
+            return;
+        }
+        self.last_polled = Instant::now() - Duration::from_secs(1);
+        self.poll_for_events(options);
+    }
+
     /// Poll for events from the OS. This needs to be done reasonably often
     /// (60Hz is probably fine) so that the host OS doesn't consider touchHLE
     /// to be unresponsive. Note that events are not returned by this function,
@@ -531,8 +543,9 @@ impl Window {
     pub fn poll_for_events(&mut self, options: &Options) {
         assert!(self.on_main_stack);
         let now = Instant::now();
-        // poll roughly twice per frame to try to avoid missing frames sometimes
-        if now.duration_since(self.last_polled) < Duration::from_secs_f64(1.0 / 120.0) {
+        // Poll about twice per 120 Hz refresh. On iOS the host display link
+        // only ticks inside this pump, and the guest frame clock follows it.
+        if now.duration_since(self.last_polled) < Duration::from_secs_f64(1.0 / 240.0) {
             return;
         }
         self.last_polled = now;

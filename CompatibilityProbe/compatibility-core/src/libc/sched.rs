@@ -6,13 +6,14 @@
 //! `sched.h`.
 
 use crate::dyld::{export_c_func, FunctionExports};
+use crate::environment::ThreadBlock;
 use crate::Environment;
 
 fn sched_yield(env: &mut Environment) -> i32 {
-    log_dbg!(
-        "TODO: thread {} requested processor yield, ignoring",
-        env.current_thread
-    );
+    // Guest threads share one host thread, so a guest spinning on
+    // sched_yield (Minecraft's terrain worker handshake does) would otherwise
+    // burn its whole quantum before the thread it waits on can run.
+    env.yield_thread(ThreadBlock::NotBlocked);
     0 // success
 }
 

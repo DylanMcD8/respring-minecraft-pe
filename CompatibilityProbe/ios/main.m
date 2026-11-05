@@ -220,8 +220,9 @@ static void minecraftConfigureRefresh(UIView *view) {
             [fpsLabel.heightAnchor constraintEqualToConstant:22],
         ]];
     }
-    if (backgroundFrameLimit <= 60 && !profileRefresh && !fpsLabel &&
-        !(minecraft_uses_ipad_layout() && backgroundFrameLimit == 60)) return;
+    // Background terrain modes follow this link's vsync deadlines rather than
+    // sleep-based pacing, so create it whenever one of them is active.
+    if (!backgroundFrameLimit && !profileRefresh && !fpsLabel) return;
     UIScreen *screen = view.window.windowScene.screen ?: UIScreen.mainScreen;
     CADisplayLink *link = [screen displayLinkWithTarget:[[MinecraftRefreshObserver new] autorelease] selector:@selector(refresh:)];
     float target = MIN(MAX(60, backgroundFrameLimit), screen.maximumFramesPerSecond);

@@ -1967,6 +1967,10 @@ impl Environment {
                                 self.relock_unblocked_mutex_for_thread(thread_id, mutex);
                                 return thread_id;
                             }
+                            // Wake for the timeout too, rather than treating a
+                            // timed wait as a deadlock when nothing else runs.
+                            let wake = Instant::now() + (deadline - time);
+                            next_awakening = Some(next_awakening.map_or(wake, |other| other.min(wake)));
                         }
                     }
                     ThreadBlock::Joining(joinee_thread, ptr) => {
@@ -2014,6 +2018,9 @@ impl Environment {
                 let duration = next_awakening.duration_since(Instant::now());
                 log_dbg!("All threads blocked/asleep, sleeping for {:?}.", duration);
                 std::thread::sleep(duration);
+                if let Some(window) = self.window.as_mut().filter(|w| w.on_main_stack()) {
+                    window.poll_for_events_now(&self.options);
+                }
                 // Try again, there should be some thread awake now (or
                 // there will be soon, since timing is approximate).
                 continue;
