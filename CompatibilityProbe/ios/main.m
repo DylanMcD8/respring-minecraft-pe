@@ -123,7 +123,8 @@ static UIView *minecraftUpdateDrawable(id context) {
                 if (!CGAffineTransformEqualToTransform(view.transform,transform)) {
                     view.transform = transform;
                 }
-                view.superview.clipsToBounds = YES;
+                // A layer write opens an implicit transaction, so skip it once set.
+                if (!view.superview.clipsToBounds) view.superview.clipsToBounds = YES;
                 static CGSize lastCanvas;
                 static CGFloat lastZoom;
                 if (!CGSizeEqualToSize(lastCanvas,canvas) || lastZoom != zoom) {

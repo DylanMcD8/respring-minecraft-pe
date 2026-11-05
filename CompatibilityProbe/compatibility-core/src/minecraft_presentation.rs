@@ -44,14 +44,29 @@ fn orient(src: &[u8], width: usize, height: usize, turn: usize, dst: &mut Vec<u8
     if width==0 || height==0 || turn>3 || src.len()!=size { return None; }
     let (w,h) = if turn%2==0 {(width,height)} else {(height,width)};
     dst.resize(size,0);
-    for y in 0..h { for x in 0..w {
-        let (sx,sy) = match turn {
-            0 => (x,height-1-y), 1 => (y,x),
-            2 => (width-1-x,y), 3 => (width-1-y,height-1-x), _ => unreachable!(),
-        };
-        let from=(sy*width+sx)*4; let to=(y*w+x)*4;
-        dst[to..to+4].copy_from_slice(&src[from..from+4]);
-    }}
+    let row = width*4;
+    match turn {
+        // Flips are whole-row copies, reversed pixel order for a half turn.
+        0 => for (y,out) in dst.chunks_exact_mut(row).enumerate() {
+            out.copy_from_slice(&src[(height-1-y)*row..][..row]);
+        },
+        2 => for (y,out) in dst.chunks_exact_mut(row).enumerate() {
+            for (o,i) in out.chunks_exact_mut(4).zip(src[y*row..][..row].chunks_exact(4).rev()) { o.copy_from_slice(i); }
+        },
+        // Quarter turns transpose, so walk tiles that stay in cache.
+        _ => {
+            const TILE: usize = 32;
+            for ty in (0..h).step_by(TILE) { for tx in (0..w).step_by(TILE) {
+                for y in ty..(ty+TILE).min(h) {
+                    let out=&mut dst[y*w*4..][..w*4];
+                    for x in tx..(tx+TILE).min(w) {
+                        let (sx,sy) = if turn==1 {(y,x)} else {(width-1-y,height-1-x)};
+                        out[x*4..x*4+4].copy_from_slice(&src[(sy*width+sx)*4..][..4]);
+                    }
+                }
+            }}
+        }
+    }
     Some((w,h))
 }
 

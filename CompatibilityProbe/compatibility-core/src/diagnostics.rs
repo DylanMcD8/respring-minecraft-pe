@@ -76,6 +76,10 @@ pub fn scope(phase: Phase) -> Scope {
         (!matches!(phase, Phase::Interpreter) || INTERPRETER_TIMING.load(Ordering::Relaxed));
     Scope(enabled.then(|| (phase, Instant::now())))
 }
+impl Scope {
+    /// Drops the scope without recording a sample.
+    pub fn discard(mut self) { self.0 = None; }
+}
 impl Drop for Scope {
     fn drop(&mut self) {
         if let Some((phase, start)) = self.0 {

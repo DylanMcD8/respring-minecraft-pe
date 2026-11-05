@@ -41,9 +41,13 @@ impl State {
         env: &mut Environment,
         layer: id,
     ) -> CALayerHostObject {
-        // Clone given layer
-        let original = env.objc.borrow::<CALayerHostObject>(layer);
+        // Clone given layer. Composition uploads presented pixels from the
+        // original layer, so don't copy a whole frame here on every composite.
+        let original = env.objc.borrow_mut::<CALayerHostObject>(layer);
+        let pixels = original.presented_pixels.take();
         let mut presentation = original.clone();
+        presentation.presented_pixels = pixels.as_ref().map(|&(_, width, height)| (Vec::new(), width, height));
+        original.presented_pixels = pixels;
 
         // Loop over all animations and set the presentation layer's values
         let named_animations: Vec<(Option<String>, id)> = presentation

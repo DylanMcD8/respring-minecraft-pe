@@ -59,6 +59,8 @@ pub(super) struct CALayerHostObject {
     /// For CAEAGLLayer only (internal state for compositor)
     pub(super) presented_gpu_frame: Option<crate::gles::gpu_transfer::Frame>,
     pub(super) presented_pixels: Option<(Vec<u8>, u32, u32)>,
+    /// Internal state for compositor: the presented pixels' alpha was made 255
+    pub(super) presented_pixels_opaque: bool,
     /// Internal, only exposed when calling `drawLayer:inContext:`
     pub(super) cg_context: Option<CGContextRef>,
     /// Internal state for compositor
@@ -69,6 +71,40 @@ pub(super) struct CALayerHostObject {
     pub(super) anonymous_animations: HashSet<id>, // CAAnimation*
 }
 impl HostObject for CALayerHostObject {}
+impl Default for CALayerHostObject {
+    fn default() -> Self {
+        CALayerHostObject {
+            delegate: nil,
+            sublayers: Vec::new(),
+            superlayer: nil,
+            bounds: CGRect {
+                origin: CGPoint { x: 0.0, y: 0.0 },
+                size: CGSize { width: 0.0, height: 0.0 }
+            },
+            position: CGPoint { x: 0.0, y: 0.0 },
+            anchor_point: CGPoint { x: 0.5, y: 0.5 },
+            affine_transform: CGAffineTransformIdentity,
+            hidden: false,
+            opaque: false,
+            contents_scale: 1.0,
+            opacity: 1.0,
+            background_color: None, // transparency
+            corner_radius: 0.0,
+            needs_display: false,
+            needs_display_on_bounds_change: false,
+            contents: nil,
+            drawable_properties: nil,
+            presented_gpu_frame: None,
+            presented_pixels: None,
+            presented_pixels_opaque: false,
+            cg_context: None,
+            gles_texture: None,
+            gles_texture_is_up_to_date: false,
+            animations: HashMap::new(),
+            anonymous_animations: HashSet::new(),
+        }
+    }
+}
 
 impl CALayerHostObject {
     /// Internal helper method: generate a transformation matrix to transform
@@ -113,35 +149,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation CALayer: NSObject
 
 + (id)alloc {
-    let host_object = Box::new(CALayerHostObject {
-        delegate: nil,
-        sublayers: Vec::new(),
-        superlayer: nil,
-        bounds: CGRect {
-            origin: CGPoint { x: 0.0, y: 0.0 },
-            size: CGSize { width: 0.0, height: 0.0 }
-        },
-        position: CGPoint { x: 0.0, y: 0.0 },
-        anchor_point: CGPoint { x: 0.5, y: 0.5 },
-        affine_transform: CGAffineTransformIdentity,
-        hidden: false,
-        opaque: false,
-        contents_scale: 1.0,
-        opacity: 1.0,
-        background_color: None, // transparency
-        corner_radius: 0.0,
-        needs_display: false,
-        needs_display_on_bounds_change: false,
-        contents: nil,
-        drawable_properties: nil,
-        presented_gpu_frame: None,
-        presented_pixels: None,
-        cg_context: None,
-        gles_texture: None,
-        gles_texture_is_up_to_date: false,
-        animations: HashMap::new(),
-        anonymous_animations: HashSet::new(),
-    });
+    let host_object = Box::new(CALayerHostObject::default());
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 

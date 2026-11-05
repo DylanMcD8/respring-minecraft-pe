@@ -22,22 +22,30 @@ unsafe fn floats<const N:usize>(g:&mut dyn GLES,p:GLenum)->[GLfloat;N] {let mut 
 unsafe fn pointer(g:&mut dyn GLES,p:GLenum)->*const GLvoid {let mut v=std::ptr::null();g.GetPointerv(p,&mut v);v}
 pub unsafe fn drain_errors(g:&mut dyn GLES)->Vec<GLenum> {let mut v=Vec::new();for _ in 0..16 {let e=g.GetError();if e==gl::NO_ERROR{break;}v.push(e);}v}
 
-const ENV_PARAMETERS:[GLenum;11]=[
+const ENV_PARAMETERS:[GLenum;9]=[
  gl::TEXTURE_ENV_MODE,gl::COMBINE_RGB,gl::COMBINE_ALPHA,gl::SRC0_RGB,gl::SRC1_RGB,
- gl::OPERAND0_RGB,gl::OPERAND1_RGB,gl::SRC0_ALPHA,gl::OPERAND0_ALPHA,gl::RGB_SCALE,gl::ALPHA_SCALE,
+ gl::OPERAND0_RGB,gl::OPERAND1_RGB,gl::SRC0_ALPHA,gl::OPERAND0_ALPHA,
 ];
+// The scales are float parameters; GLES1OnGL2 rejects them through the int query.
+const ENV_SCALES:[GLenum;2]=[gl::RGB_SCALE,gl::ALPHA_SCALE];
+pub type OpaqueEnv=Option<([GLint;9],[GLfloat;2])>;
 /// RGB *= primary color; alpha comes only from primary color. This matches
 /// opaque CALayer's CPU alpha=255 followed by opacity modulation, including
 /// parent opacity/blending. Does not modify the shared texture object.
-pub unsafe fn opaque_begin(g:&mut dyn GLES,enabled:bool)->Option<[GLint;11]> {
+pub unsafe fn opaque_begin(g:&mut dyn GLES,enabled:bool)->OpaqueEnv {
  if !enabled{return None;}
  let old=ENV_PARAMETERS.map(|p|{let mut v=0;g.GetTexEnviv(gl::TEXTURE_ENV,p,&mut v);v});
- let values=[gl::COMBINE,gl::MODULATE,gl::REPLACE,gl::TEXTURE,gl::PRIMARY_COLOR,gl::SRC_COLOR,gl::SRC_COLOR,gl::PRIMARY_COLOR,gl::SRC_ALPHA,1,1];
+ let scales=ENV_SCALES.map(|p|{let mut v=0.0;g.GetTexEnvfv(gl::TEXTURE_ENV,p,&mut v);v});
+ let values=[gl::COMBINE,gl::MODULATE,gl::REPLACE,gl::TEXTURE,gl::PRIMARY_COLOR,gl::SRC_COLOR,gl::SRC_COLOR,gl::PRIMARY_COLOR,gl::SRC_ALPHA];
  for (p,v) in ENV_PARAMETERS.into_iter().zip(values) {g.TexEnvi(gl::TEXTURE_ENV,p,v as GLint);}
- Some(old)
+ for p in ENV_SCALES {g.TexEnvf(gl::TEXTURE_ENV,p,1.0);}
+ Some((old,scales))
 }
-pub unsafe fn opaque_end(g:&mut dyn GLES,old:Option<[GLint;11]>) {
- if let Some(old)=old {for(p,v)in ENV_PARAMETERS.into_iter().zip(old){g.TexEnvi(gl::TEXTURE_ENV,p,v);}}
+pub unsafe fn opaque_end(g:&mut dyn GLES,old:OpaqueEnv) {
+ if let Some((old,scales))=old {
+  for(p,v)in ENV_PARAMETERS.into_iter().zip(old){g.TexEnvi(gl::TEXTURE_ENV,p,v);}
+  for(p,v)in ENV_SCALES.into_iter().zip(scales){g.TexEnvf(gl::TEXTURE_ENV,p,v);}
+ }
 }
 
 const CAPS:[GLenum;21]=[

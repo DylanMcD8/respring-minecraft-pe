@@ -413,6 +413,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         unsafe {
             present_renderbuffer(env);
         }
+        crate::frameworks::core_animation::ca_eagl_layer::presented_directly(env);
     } else {
         if fullscreen_layer != nil {
             // If there's a single layer that covers the screen, and this isn't

@@ -135,12 +135,19 @@ pub fn present_pixels(env: &mut Environment, layer: id, pixels: Vec<u8>, width: 
     let host_obj = env.objc.borrow_mut::<CALayerHostObject>(layer);
     host_obj.presented_gpu_frame = None;
     host_obj.presented_pixels = Some((pixels, width, height));
+    host_obj.presented_pixels_opaque = false;
     host_obj.gles_texture_is_up_to_date = false;
+    super::composition::frame_presented(env);
 }
 
 /// Dedicated shared texture, kept separate from CGImage/UIKit texture uploads.
 pub(crate) fn present_gpu_frame(env:&mut Environment,layer:id,frame:crate::gles::gpu_transfer::Frame) {
     env.objc.borrow_mut::<CALayerHostObject>(layer).presented_gpu_frame=Some(frame);
+    super::composition::frame_presented(env);
+}
+/// A frame swapped straight to the window replaces whatever was composited.
+pub(crate) fn presented_directly(env:&mut Environment) {
+    super::composition::frame_presented(env);
 }
 pub(crate) fn is_opaque(env:&Environment,layer:id)->bool {
     env.objc.borrow::<CALayerHostObject>(layer).opaque

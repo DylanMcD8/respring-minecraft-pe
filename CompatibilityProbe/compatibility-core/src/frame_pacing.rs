@@ -22,7 +22,7 @@ pub(crate)fn simulation_counter(env:&crate::Environment)->Option<(u32,u32)>{
 /// Inclusive compositor/native-swap cost, combined with the next guest render
 /// callback for conservative workload fallback. No extra callback/timer.
 pub(crate)struct CompositionWork{began:Option<std::time::Instant>,loading:bool}
-impl CompositionWork{pub fn begin(enabled:bool,loading:bool)->Self{Self{began:enabled.then(std::time::Instant::now),loading}}}
+impl CompositionWork{pub fn begin(enabled:bool,loading:bool)->Self{Self{began:enabled.then(std::time::Instant::now),loading}}pub fn discard(mut self){self.began=None;}}
 impl Drop for CompositionWork{fn drop(&mut self){if let Some(start)=self.began{let elapsed=start.elapsed().as_secs_f64();#[cfg(target_os="ios")]unsafe{peggle_pacing_composition(elapsed,i32::from(self.loading));}}}}
 
 #[repr(C)]#[derive(Default)]struct Status{enabled:i32,allowed:i32,maximum:i32,low_power:i32,thermal:i32,active:i32,loading:i32,target:i32,reason:i32,hold_reason:i32,bad:i32,hold_remaining:f64,game_wall:f64,work:f64,wait:f64,composition:f64}

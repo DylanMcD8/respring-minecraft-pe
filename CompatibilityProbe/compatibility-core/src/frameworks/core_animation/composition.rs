@@ -34,6 +34,10 @@ pub(super) struct State {
     fps_counter: Option<FpsCounter>,
     misc_gl_objects: Option<MiscGlObjects>,
     host_blit_active: Option<bool>,
+    /// Bumped for every EAGL frame presented to a layer.
+    content_generation: u32,
+    /// What the screen currently shows, see [composite_key].
+    last_composite: Option<Vec<u32>>,
 }
 
 struct MiscGlObjects {
@@ -58,7 +62,16 @@ pub(crate) fn reset_after_pause(env: &mut Environment) {
     let state = &mut env.framework_state.core_animation.composition;
     state.presentation_schedule.reset();
     state.fps_counter = None;
+    // The drawable may not have kept its contents while backgrounded.
+    state.last_composite = None;
     crate::peggle_ui_cadence::reset_after_pause(env);
+}
+
+/// A presented EAGL frame changes a layer's texture without changing any of
+/// its layer state.
+pub(super) fn frame_presented(env: &mut Environment) {
+    let state = &mut env.framework_state.core_animation.composition;
+    state.content_generation = state.content_generation.wrapping_add(1);
 }
 
 unsafe fn load_matrix(gles: &mut dyn GLES, matrix: Matrix<4>) {
@@ -89,6 +102,8 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
     if !cfg!(target_os = "ios") && find_fullscreen_eagl_layer(env) != nil {
         // No composition done, EAGLContext will present directly.
         log_dbg!("Using CAEAGLLayer fast path, skipping composition");
+        // The screen no longer shows the last composite.
+        env.framework_state.core_animation.composition.last_composite = None;
         return None;
     }
 
@@ -118,17 +133,8 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
     let new_recomposite_next=Some(refresh.map_or(decision.next, |(_, next)| next));
     // Include composition/native-swap wall time in overload decisions. A
     // return through either host-blit or normal composition drops this guard.
-    let _pacing_work=crate::frame_pacing::CompositionWork::begin(adaptive.is_some(),loading_peggle_hd);
-    let _composition_timing = crate::diagnostics::scope(crate::diagnostics::Phase::Composition);
-
-    if env.options.print_fps {
-        env.framework_state
-            .core_animation
-            .composition
-            .fps_counter
-            .get_or_insert_with(FpsCounter::start)
-            .count_frame(format_args!("Core Animation compositor"));
-    }
+    let pacing_work=crate::frame_pacing::CompositionWork::begin(adaptive.is_some(),loading_peggle_hd);
+    let composition_timing = crate::diagnostics::scope(crate::diagnostics::Phase::Composition);
 
     let window_layers: Vec<id> = windows
         .into_iter()
@@ -152,6 +158,41 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         env.window().rotation_matrix(),
         env.window().virtual_cursor_visible_at(),
     );
+
+    // Without a new frame or layer change, the screen already shows this
+    // composite. Skip drawing and presenting it again at every refresh.
+    let key = composite_key(
+        env,
+        &window_layers,
+        (fb_width, fb_height),
+        screen_bounds,
+        present_frame_args,
+    );
+    static SKIP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let skip = *SKIP.get_or_init(|| std::env::var("MINECRAFT_COMPOSITE_SKIP").as_deref() != Ok("0"));
+    let state = &mut env.framework_state.core_animation.composition;
+    if !force
+        && skip
+        && key
+            .as_ref()
+            .is_some_and(|(key, stale)| !stale && state.last_composite.as_ref() == Some(key))
+    {
+        // Keep composition timings and pacing work to real composites.
+        pacing_work.discard();
+        composition_timing.discard();
+        return new_recomposite_next;
+    }
+    // Recorded before drawing; any upload below makes the stale textures current.
+    state.last_composite = key.map(|(key, _)| key);
+
+    if env.options.print_fps {
+        env.framework_state
+            .core_animation
+            .composition
+            .fps_counter
+            .get_or_insert_with(FpsCounter::start)
+            .count_frame(format_args!("Core Animation compositor"));
+    }
 
     if cfg!(target_os = "ios") && env.options.fullscreen_host_blit {
         let direct = try_fullscreen_host_blit(env, present_frame_args, &window_layers);
@@ -436,6 +477,100 @@ fn display_layers(env: &mut Environment, root_layer: id) {
     }
 }
 
+/// Everything a composite depends on, or [None] while a layer it visits
+/// animates (those composites also run animation callbacks). Layer textures
+/// only change with a presented frame (the generation) or once an upload is
+/// due, which is returned as `stale` so that composite still happens.
+fn composite_key(
+    env: &Environment,
+    roots: &[id],
+    fb: (u32, u32),
+    screen: CGRect,
+    (viewport, rotation, cursor): ((u32, u32, u32, u32), Matrix<2>, Option<(f32, f32, bool)>),
+) -> Option<(Vec<u32>, bool)> {
+    let [[r0, r1], [r2, r3]] = *rotation.columns();
+    let (cx, cy, pressed) = cursor.unwrap_or((0.0, 0.0, false));
+    let mut key = vec![
+        env.framework_state.core_animation.composition.content_generation,
+        fb.0,
+        fb.1,
+        viewport.0,
+        viewport.1,
+        viewport.2,
+        viewport.3,
+        cursor.is_some() as u32,
+        pressed as u32,
+    ];
+    key.extend([r0, r1, r2, r3, cx, cy, screen.size.width, screen.size.height].map(f32::to_bits));
+    let mut stale = false;
+    for &root in roots {
+        if !push_layer_key(&env.objc, root, &mut key, &mut stale) {
+            return None;
+        }
+    }
+    Some((key, stale))
+}
+
+/// Appends what composite_layer_recursive reads from a layer, then its
+/// sublayers and an end marker. Returns false if the layer animates. Like the
+/// compositor this stops at a hidden layer, so animations below it never run.
+fn push_layer_key(objc: &ObjC, layer: id, key: &mut Vec<u32>, stale: &mut bool) -> bool {
+    let l = objc.borrow::<CALayerHostObject>(layer);
+    if !l.animations.is_empty() || !l.anonymous_animations.is_empty() {
+        return false;
+    }
+    if l.hidden {
+        return true;
+    }
+    let alternate = l.contents != nil || l.cg_context.is_some();
+    let gpu = crate::gles::gpu_transfer::select_frame(l.presented_gpu_frame, l.opaque, alternate);
+    let needs_upload = l.presented_pixels.is_some() || alternate;
+    *stale |= gpu.is_none() && needs_upload && !l.gles_texture_is_up_to_date;
+
+    let (bounds, t) = (l.bounds, l.affine_transform);
+    key.push(layer.to_bits());
+    key.extend(
+        [
+            bounds.origin.x,
+            bounds.origin.y,
+            bounds.size.width,
+            bounds.size.height,
+            l.position.x,
+            l.position.y,
+            l.anchor_point.x,
+            l.anchor_point.y,
+            t.a,
+            t.b,
+            t.c,
+            t.d,
+            t.tx,
+            t.ty,
+            l.opacity,
+            l.corner_radius,
+        ]
+        .map(f32::to_bits),
+    );
+    key.extend([
+        l.opaque as u32,
+        l.contents.to_bits(),
+        l.cg_context.map_or(0, |c| c.to_bits()),
+    ]);
+    key.extend(l.background_color.map_or([0; 5], |c| {
+        [1, c.r.to_bits(), c.g.to_bits(), c.b.to_bits(), c.a.to_bits()]
+    }));
+    key.extend(gpu.map_or([0; 5], |f| {
+        [1, f.texture, f.width, f.height, f.force_opaque_alpha as u32]
+    }));
+    key.extend(l.presented_pixels.as_ref().map_or([0; 3], |&(_, w, h)| [1, w, h]));
+    for &sublayer in &l.sublayers {
+        if !push_layer_key(objc, sublayer, key, stale) {
+            return false;
+        }
+    }
+    key.push(u32::MAX);
+    true
+}
+
 /// Traverses the layer tree and draws each layer.
 unsafe fn composite_layer_recursive(
     env: &mut Environment,
@@ -584,18 +719,12 @@ unsafe fn composite_layer_recursive(
     // Update original layer texture with CAEAGLLayer pixels (slow path), if any
     if need_update {
         let original_host_obj = env.objc.borrow_mut::<CALayerHostObject>(layer);
-        if let Some((ref mut pixels, width, height)) = original_host_obj.presented_pixels {
+        if let Some((ref pixels, width, height)) = original_host_obj.presented_pixels {
             // The pixels are always RGBA, but if the layer is opaque then the
-            // alpha channel is meant to be ignored. glTexImage2D() has no
-            // option to ignore it, so let's manually set them to 255.
-            if original_host_obj.opaque {
-                let mut i = 3;
-                while i < pixels.len() {
-                    pixels[i] = 255;
-                    i += 4;
-                }
-            }
-
+            // alpha channel is meant to be ignored. Rather than setting it to
+            // 255 in every frame, the draw below takes alpha from the primary
+            // color. As before, that sticks until the next presented frame.
+            original_host_obj.presented_pixels_opaque |= original_host_obj.opaque;
             upload_rgba8_pixels(gles.as_mut(), pixels, (width, height));
         }
     }
@@ -627,6 +756,9 @@ unsafe fn composite_layer_recursive(
 
     // Draw texture, if any
     if need_texture {
+        // CGImage/CGContext uploads replace the presented pixels and keep alpha.
+        let pixels_opaque = host_obj.contents == nil && host_obj.cg_context.is_none()
+            && env.objc.borrow::<CALayerHostObject>(layer).presented_pixels_opaque;
         let misc = env
             .framework_state
             .core_animation
@@ -665,7 +797,7 @@ unsafe fn composite_layer_recursive(
             SQUARE_INDICES.len() as _,
             gles11::UNSIGNED_BYTE,
             0 as *const GLvoid,
-            gpu_frame.is_some_and(|f|f.force_opaque_alpha),
+            gpu_frame.map_or(pixels_opaque, |f| f.force_opaque_alpha),
         );
     }
     std::mem::drop(gles);
@@ -833,6 +965,7 @@ fn try_fullscreen_host_blit(env: &mut Environment,
             // Same opaque-alpha policy as normal CALayer composition. These
             // readback rows are already bottom-up, matching present_frame's UVs.
             for alpha in pixels.iter_mut().skip(3).step_by(4) { *alpha = 255; }
+            state.presented_pixels_opaque = true;
             upload_rgba8_pixels(gles.as_mut(), pixels, (*width, *height));
             state.gles_texture_is_up_to_date = true;
         }
@@ -847,4 +980,113 @@ fn try_fullscreen_host_blit(env: &mut Environment,
     drop(gles);
     env.window.as_mut().unwrap().swap_window();
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gles::gpu_transfer::Frame;
+    use crate::mem::Ptr;
+
+    // A root with two sublayers, at fake ids. Nothing here touches guest memory.
+    fn tree(edit: impl FnOnce(&mut [CALayerHostObject; 3])) -> (ObjC, [id; 3]) {
+        let ids = [0x1000, 0x2000, 0x3000].map(Ptr::from_bits);
+        let mut layers = [(); 3].map(|_| CALayerHostObject::default());
+        layers[0].sublayers = ids[1..].to_vec();
+        edit(&mut layers);
+        let mut objc = ObjC::new();
+        for (id, layer) in ids.into_iter().zip(layers) {
+            objc.register_static_object(id, Box::new(layer));
+        }
+        (objc, ids)
+    }
+    fn key(edit: impl FnOnce(&mut [CALayerHostObject; 3])) -> Option<(Vec<u32>, bool)> {
+        let (objc, ids) = tree(edit);
+        let (mut key, mut stale) = (Vec::new(), false);
+        push_layer_key(&objc, ids[0], &mut key, &mut stale).then_some((key, stale))
+    }
+
+    #[test]
+    fn composite_key_covers_layer_state() {
+        let base = key(|_| {}).unwrap();
+        assert_eq!(base, key(|_| {}).unwrap());
+        let edits: [fn(&mut CALayerHostObject); 13] = [
+            |l| l.bounds.origin.x = 1.0,
+            |l| l.bounds.size.height = 10.0,
+            |l| l.position.x = 1.0,
+            |l| l.anchor_point.y = 0.0,
+            |l| l.affine_transform.b = 1.0,
+            |l| l.affine_transform.ty = 1.0,
+            |l| l.opacity = 0.5,
+            |l| l.corner_radius = 2.0,
+            |l| l.opaque = true,
+            |l| l.hidden = true,
+            |l| l.contents = Ptr::from_bits(0x9000),
+            |l| l.cg_context = Some(Ptr::from_bits(0x9000)),
+            |l| {
+                let c = CGColorHostObject { color_space_name: "", r: 0.0, g: 0.0, b: 0.0, a: 0.0 };
+                l.background_color = Some(c);
+            },
+        ];
+        for (i, edit) in edits.into_iter().enumerate() {
+            for layer in 0..3 {
+                let key = key(|l| edit(&mut l[layer])).unwrap();
+                assert_ne!(key.0, base.0, "edit {i} on layer {layer}");
+            }
+        }
+        // Sublayer order, and the same draw order with a different tree shape.
+        assert_ne!(key(|l| l[0].sublayers.reverse()).unwrap().0, base.0);
+        let nested = key(|l| {
+            let leaf = l[0].sublayers.pop().unwrap();
+            l[1].sublayers.push(leaf);
+        });
+        assert_ne!(nested.unwrap().0, base.0);
+    }
+
+    #[test]
+    fn composite_key_tracks_presented_frames() {
+        let pixels = |l: &mut CALayerHostObject| l.presented_pixels = Some((vec![0; 64], 4, 4));
+        let (stale, base) = (key(|l| pixels(&mut l[1])).unwrap(), key(|_| {}).unwrap());
+        assert!(stale.1);
+        assert_ne!(stale.0, base.0);
+        // Once uploaded the same tree matches, so the next refresh can skip.
+        let uploaded = key(|l| {
+            pixels(&mut l[1]);
+            l[1].gles_texture_is_up_to_date = true;
+        });
+        assert_eq!(uploaded.unwrap(), (stale.0, false));
+        assert!(key(|l| l[2].contents = Ptr::from_bits(0x9000)).unwrap().1);
+
+        let frame = Frame { texture: 7, width: 4, height: 4, force_opaque_alpha: true };
+        let opaque = key(|l| l[1].opaque = true).unwrap();
+        let gpu = key(|l| {
+            l[1].opaque = true;
+            l[1].presented_gpu_frame = Some(frame);
+        });
+        // The shared texture is never uploaded by the compositor.
+        assert!(gpu.as_ref().is_some_and(|(key, stale)| !stale && *key != opaque.0));
+        // Unselected (non-opaque layer) frames are not drawn, so don't count.
+        assert_eq!(key(|l| l[1].presented_gpu_frame = Some(frame)).unwrap(), base);
+    }
+
+    #[test]
+    fn composite_key_rejects_reachable_animations() {
+        let animate = |l: &mut CALayerHostObject| {
+            l.anonymous_animations.insert(Ptr::from_bits(0x9000));
+        };
+        assert!(key(|l| animate(&mut l[2])).is_none());
+        assert!(key(|l| l[2].animations.extend([(String::new(), Ptr::from_bits(0x9000))])).is_none());
+        // A hidden layer's own animations still run in composition...
+        assert!(key(|l| {
+            l[2].hidden = true;
+            animate(&mut l[2]);
+        })
+        .is_none());
+        // ...but nothing below a hidden layer is visited.
+        let hidden = key(|l| {
+            l[0].hidden = true;
+            animate(&mut l[2]);
+        });
+        assert_eq!(hidden, Some((Vec::new(), false)));
+    }
 }
