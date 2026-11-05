@@ -18,7 +18,7 @@
 #![allow(dead_code, unused_assignments)]
 
 use crate::cpu::{CpuError, CpuState};
-use crate::mem::{ConstVoidPtr, Mem, Ptr};
+use crate::mem::{Mem, Ptr};
 
 mod arm;
 mod thumb16;
@@ -31,6 +31,8 @@ mod minecraft_queue;
 #[cfg(all(target_arch="aarch64",target_endian="little"))]
 mod minecraft_twist;
 mod minecraft_loading;
+#[cfg(test)]
+mod hot_path_tests;
 
 const CPSR_THUMB: u32 = 0x0000_0020;
 const CPSR_USER_MODE: u32 = 0x0000_0010;
@@ -84,6 +86,12 @@ pub struct InterpreterCpu {
     /// Local exclusive monitor address (LDREX/STREX). Single host thread, so we
     /// only track the address; STREX succeeds iff it matches a prior LDREX.
     excl_addr: Option<u32>,
+    /// Linked host functions (by index past SVC_LINKED_FUNCTIONS_BASE) that are
+    /// register-only compiler-rt division helpers, finished without leaving the
+    /// batch; see [Self::leaf_host_call]. Off when the environment zeroes the
+    /// stack after every host call.
+    leaf_host_calls: bool,
+    leaf_host_functions: Vec<Option<fn(u32, u32) -> u32>>,
     /// [P1 debug] ring buffer of the last executed (pc, insn) pairs, dumped when
     /// a fatal CPU error happens so we can see the trail INTO a bad address
     /// (a derail can run sequentially through garbage before faulting).
@@ -133,6 +141,8 @@ impl InterpreterCpu {
             fpscr: 0,
             null_segment_size: null_page_count * 0x1000,
             excl_addr: None,
+            leaf_host_calls: false,
+            leaf_host_functions: Vec::new(),
             trace: [(0, 0); 64],
             trace_pos: 0,
             dbg_n: 0,
@@ -200,6 +210,46 @@ impl InterpreterCpu {
     #[allow(dead_code)]
     pub fn set_fpscr(&mut self, v: u32) {
         self.fpscr = v;
+    }
+    pub fn set_leaf_host_calls(&mut self, on: bool) {
+        self.leaf_host_calls = on;
+    }
+    /// dyld reports each host function it links lazily; only compiler-rt's
+    /// 32-bit division helpers are recorded. Helpers reached through
+    /// create_proc_address or a non-lazy pointer keep the full host round trip
+    /// (MCPE binds all four through its lazy __symbol_stub4 entries).
+    pub fn register_leaf_host_function(&mut self, index: u32, symbol: &str) {
+        let f: fn(u32, u32) -> u32 = match symbol {
+            "___udivsi3" => |a, b| a / b,
+            "___umodsi3" => |a, b| a % b,
+            "___divsi3" => |a, b| (a as i32).wrapping_div(b as i32) as u32,
+            "___modsi3" => |a, b| (a as i32).wrapping_rem(b as i32) as u32,
+            _ => return,
+        };
+        let index = index as usize;
+        if self.leaf_host_functions.len() <= index {
+            self.leaf_host_functions.resize(index + 1, None);
+        }
+        self.leaf_host_functions[index] = Some(f);
+    }
+    // The same result the host call writes to r0 (libc/compiler_rt.rs), plus the
+    // LR return environment::handle_cpu_state adds for 4-byte stubs. A zero
+    // divisor still goes to the host, which handles it like the device does.
+    #[inline(always)]
+    fn leaf_host_call(&mut self, svc: u32) -> bool {
+        use crate::dyld::Dyld;
+        if !self.leaf_host_calls || self.regs[1] == 0 {
+            return false;
+        }
+        let index = (svc & !Dyld::SVC_LAZY_LINK_RET_FLAG).wrapping_sub(Dyld::SVC_LINKED_FUNCTIONS_BASE) as usize;
+        let Some(&Some(f)) = self.leaf_host_functions.get(index) else {
+            return false;
+        };
+        self.regs[0] = f(self.regs[0], self.regs[1]);
+        if svc & Dyld::SVC_LAZY_LINK_RET_FLAG != 0 {
+            self.bx_write_pc(self.regs[14]);
+        }
+        true
     }
     pub fn invalidate_cache_range(&mut self, _base: u32, _size: u32) {
         // P0: no-op. P1: clears the PC->decoded-instruction cache (dyld rewrites
@@ -398,9 +448,11 @@ impl InterpreterCpu {
         self.cpsr |= ((it >> 2) & 0b11_1111) << 10;
         self.cpsr |= (it & 0b11) << 25;
     }
-    /// In an IT block iff the low 4 bits of ITSTATE are nonzero.
+    /// In an IT block iff the low 4 bits of ITSTATE (CPSR[26:25] and
+    /// CPSR[11:10]) are nonzero.
+    #[inline(always)]
     pub(super) fn in_it_block(&self) -> bool {
-        self.itstate() & 0x0f != 0
+        self.cpsr & ((0b11 << 25) | (0b11 << 10)) != 0
     }
     /// ITAdvance() per ARM ARM: shift ITSTATE[4:0] left, or clear when done.
     pub(super) fn it_advance(&mut self) {
@@ -424,62 +476,41 @@ impl InterpreterCpu {
     }
 
     // ----- data memory access (fault-aware; None/false = MemoryError) -----
+    // Mem::read_fallible/write_fallible already reject Mem's null segment; the
+    // local check only matters for fixtures whose interpreter null segment is
+    // larger than Mem's (Cpu::new passes Mem's size or 0).
+    #[inline(always)]
     pub(super) fn data_r_u32(&self, mem: &Mem, addr: u32) -> Option<u32> {
         if addr < self.null_segment_size {
             return None;
         }
-        let b = mem.get_bytes_fallible(Ptr::from_bits(addr), 4)?;
-        Some(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        mem.read_fallible::<u32>(addr).map(u32::from_le)
     }
+    #[inline(always)]
     pub(super) fn data_r_u16(&self, mem: &Mem, addr: u32) -> Option<u16> {
         if addr < self.null_segment_size {
             return None;
         }
-        let b = mem.get_bytes_fallible(Ptr::from_bits(addr), 2)?;
-        Some(u16::from_le_bytes([b[0], b[1]]))
+        mem.read_fallible::<u16>(addr).map(u16::from_le)
     }
+    #[inline(always)]
     pub(super) fn data_r_u8(&self, mem: &Mem, addr: u32) -> Option<u8> {
         if addr < self.null_segment_size {
             return None;
         }
-        let b = mem.get_bytes_fallible(Ptr::from_bits(addr), 1)?;
-        Some(b[0])
+        mem.read_fallible::<u8>(addr)
     }
+    #[inline(always)]
     pub(super) fn data_w_u32(&self, mem: &mut Mem, addr: u32, val: u32) -> bool {
-        if addr < self.null_segment_size {
-            return false;
-        }
-        match mem.get_bytes_fallible_mut(Ptr::from_bits(addr), 4) {
-            Some(b) => {
-                b.copy_from_slice(&val.to_le_bytes());
-                true
-            }
-            None => false,
-        }
+        addr >= self.null_segment_size && mem.write_fallible(addr, val.to_le())
     }
+    #[inline(always)]
     pub(super) fn data_w_u16(&self, mem: &mut Mem, addr: u32, val: u16) -> bool {
-        if addr < self.null_segment_size {
-            return false;
-        }
-        match mem.get_bytes_fallible_mut(Ptr::from_bits(addr), 2) {
-            Some(b) => {
-                b.copy_from_slice(&val.to_le_bytes());
-                true
-            }
-            None => false,
-        }
+        addr >= self.null_segment_size && mem.write_fallible(addr, val.to_le())
     }
+    #[inline(always)]
     pub(super) fn data_w_u8(&self, mem: &mut Mem, addr: u32, val: u8) -> bool {
-        if addr < self.null_segment_size {
-            return false;
-        }
-        match mem.get_bytes_fallible_mut(Ptr::from_bits(addr), 1) {
-            Some(b) => {
-                b[0] = val;
-                true
-            }
-            None => false,
-        }
+        addr >= self.null_segment_size && mem.write_fallible(addr, val)
     }
 
     // ----- VFP/NEON extension register access -----
@@ -512,21 +543,13 @@ impl InterpreterCpu {
     }
 
     /// Fetch a code halfword. `None` = fetch fault (null page / unmapped).
+    #[inline(always)]
     fn read_code_u16(&self, mem: &Mem, addr: u32) -> Option<u16> {
-        if addr < self.null_segment_size {
-            return None;
-        }
-        let p: ConstVoidPtr = Ptr::from_bits(addr);
-        let b = mem.get_bytes_fallible(p, 2)?;
-        Some(u16::from_le_bytes([b[0], b[1]]))
+        self.data_r_u16(mem, addr)
     }
+    #[inline(always)]
     fn read_code_u32(&self, mem: &Mem, addr: u32) -> Option<u32> {
-        if addr < self.null_segment_size {
-            return None;
-        }
-        let p: ConstVoidPtr = Ptr::from_bits(addr);
-        let b = mem.get_bytes_fallible(p, 4)?;
-        Some(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        self.data_r_u32(mem, addr)
     }
 
     pub fn run_or_step(&mut self, mem: &mut Mem, ticks: Option<&mut u64>) -> CpuState {
@@ -681,6 +704,9 @@ impl InterpreterCpu {
         if !thumb && (insn & 0xff00_0000) == 0xef00_0000 {
             let imm24 = insn & 0x00ff_ffff;
             self.regs[PC] = pc.wrapping_add(4);
+            if self.leaf_host_call(imm24) {
+                return CpuState::Normal;
+            }
             return CpuState::Svc(imm24);
         }
 

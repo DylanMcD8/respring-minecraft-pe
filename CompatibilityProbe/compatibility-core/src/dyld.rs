@@ -783,6 +783,7 @@ impl Dyld {
                 svc |= Self::SVC_LAZY_LINK_RET_FLAG;
             }
             self.linked_host_functions.push((symbol, f));
+            cpu.register_leaf_host_function(idx, symbol);
 
             // Rewrite stub function to call this host function
             let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);

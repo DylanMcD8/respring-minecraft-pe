@@ -15,6 +15,14 @@ static EDIT_FRAME_TRACE: AtomicBool = AtomicBool::new(false);
 static PC_SAMPLING: AtomicBool = AtomicBool::new(false);
 static HD_MARKERS: AtomicBool = AtomicBool::new(false);
 static OUTPUT: OnceLock<Mutex<File>> = OnceLock::new();
+// Guest instructions retired by the interpreter (including native-kernel
+// equivalents) since the last window, for throughput comparisons.
+static RETIRED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[inline]
+pub fn retired(count: u64) {
+    if ENABLED.load(Ordering::Relaxed) { RETIRED.fetch_add(count, Ordering::Relaxed); }
+}
 
 pub fn initialize(path: &Path, enabled: bool) -> std::io::Result<()> {
     let file = OpenOptions::new().create(true).append(true).open(path)?;
@@ -165,7 +173,7 @@ pub fn tick() {
             frames.push_str(&format!("\"{}\":{{\"frames\":{},\"fps\":{:.3},\"interval_mean_ms\":{mean:.3},\"interval_std_ms\":{std:.3},\"p50_ms\":{p50:.3},\"p95_ms\":{p95:.3},\"max_ms\":{max:.3},\"p99_ms\":{p99:.3},\"interval_samples\":{samples},\"over_50_ms\":{over_50},\"over_100_ms\":{over_100},\"over_250_ms\":{over_250}}}",if i==0 {"guest"} else {"host"},s.frame_counts[i],s.frame_counts[i] as f64/elapsed));
             s.intervals[i].clear();
         }
-        event(&format!("{{\"event\":\"window\",\"unix_time_ms\":{},\"interpreter_timing_enabled\":{},\"uptime_s\":{:.3},\"duration_s\":{elapsed:.3},\"cpu_percent_one_core\":{:.2},\"cpu_first_window\":{},\"resident_bytes\":{},\"thermal\":{},\"low_power\":{},\"max_fps\":{},\"battery_state\":{},\"orientation\":{},\"native_drawable\":[{},{}],\"allocated_guest_bytes\":{},\"frames\":{{{frames}}},\"phases\":{{{phases}}},\"gpu_ms\":null,\"power_w\":null}}",std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0,|x|x.as_millis()),INTERPRETER_TIMING.load(Ordering::Relaxed),now.duration_since(s.start).as_secs_f64(),100.0*cpu_delta/elapsed,s.previous_cpu==0.0,n.resident_bytes,n.thermal,n.low_power,n.max_fps,n.battery_state,n.orientation,n.drawable_width,n.drawable_height,s.alloc_bytes));
+        event(&format!("{{\"event\":\"window\",\"unix_time_ms\":{},\"interpreter_timing_enabled\":{},\"uptime_s\":{:.3},\"duration_s\":{elapsed:.3},\"cpu_percent_one_core\":{:.2},\"cpu_first_window\":{},\"resident_bytes\":{},\"thermal\":{},\"low_power\":{},\"max_fps\":{},\"battery_state\":{},\"orientation\":{},\"native_drawable\":[{},{}],\"allocated_guest_bytes\":{},\"interpreter_retired\":{},\"frames\":{{{frames}}},\"phases\":{{{phases}}},\"gpu_ms\":null,\"power_w\":null}}",std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0,|x|x.as_millis()),INTERPRETER_TIMING.load(Ordering::Relaxed),now.duration_since(s.start).as_secs_f64(),100.0*cpu_delta/elapsed,s.previous_cpu==0.0,n.resident_bytes,n.thermal,n.low_power,n.max_fps,n.battery_state,n.orientation,n.drawable_width,n.drawable_height,s.alloc_bytes,RETIRED.swap(0,Ordering::Relaxed)));
         let mut pcs:Vec<_>=s.pc.iter().map(|(k,v)|(*k,*v)).collect();
         pcs.sort_by(|a,b|b.1.3.cmp(&a.1.3).then(b.1.0.cmp(&a.1.0)));pcs.truncate(80);
         let mut entries=Vec::with_capacity(pcs.len());

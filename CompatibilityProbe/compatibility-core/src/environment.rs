@@ -594,6 +594,9 @@ impl Environment {
         });
 
         if collision_sort_observe {cpu.enable_collision_sort_observer();}
+        // The interpreter may finish register-only division helpers itself, which
+        // would skip the stack zeroing this option applies after each host call.
+        cpu.set_leaf_host_calls(options.zero_stack_after_guest_to_host_call.is_none());
         crate::libc::zlib::install_minecraft_zlib(verified_minecraft,&fs,&bins,&mut mem,&mut dyld,&mut libc_state);
         libc_state.minecraft_background_terrain = verified_minecraft
             && std::env::var("MINECRAFT_BACKGROUND_TERRAIN").as_deref() == Ok("1");
@@ -2307,5 +2310,62 @@ mod dylib_sorting_tests {
             result.is_err(),
             "Sort should detect self-dependency as a cycle and return an error"
         );
+    }
+}
+
+#[cfg(test)]
+mod leaf_host_call_tests {
+    use super::*;
+
+    // Thumb: sum r0/7 (___divsi3) and r0%13 (___umodsi3) for r0 = n..1, calling
+    // the `svc; bx lr` functions create_proc_address makes through r2 and r3.
+    const CODE: [u16; 15] = [
+        0xb500, 0x4604, 0x2500, 0x4620, 0x2107, 0x4790, 0x4405, 0x4620, 0x210d, 0x4798, 0x4405,
+        0x3c01, 0xd1f5, 0x4628, 0xbd00,
+    ];
+
+    fn divisions(n: u32, leaf: bool) -> (u32, f64) {
+        let options = options::Options { headless: true, popup_errors: false, ..Default::default() };
+        let icon = image::Image::from_pixel_vec(vec![0; 4], (1, 1));
+        Environment::new_without_app(options, icon).unwrap().run_app_picker(move |env| {
+            let code = env.mem.alloc(64).cast::<u16>();
+            for (i, &h) in CODE.iter().enumerate() {
+                env.mem.write(code + i as u32, h);
+            }
+            let mut helpers = [0; 2];
+            for (helper, symbol) in helpers.iter_mut().zip(["___divsi3", "___umodsi3"]) {
+                let f = env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, symbol).unwrap();
+                let svc = env.mem.read(mem::ConstPtr::<u32>::from_bits(f.addr_without_thumb_bit())) & 0xff_ffff;
+                env.cpu.register_leaf_host_function(svc - dyld::Dyld::SVC_LINKED_FUNCTIONS_BASE, symbol);
+                *helper = f.addr_with_thumb_bit();
+            }
+            env.cpu.set_leaf_host_calls(leaf);
+            // Batched like a real quantum rather than single-stepped.
+            let ticks = env.remaining_ticks.replace(u64::MAX);
+            let start = Instant::now();
+            let sum: u32 = GuestFunction::from_addr_with_thumb_bit(code.to_bits() | 1)
+                .call_from_host(env, (n, 0u32, helpers[0], helpers[1]));
+            let elapsed = start.elapsed().as_secs_f64();
+            env.remaining_ticks = ticks;
+            (sum, elapsed)
+        })
+    }
+
+    #[test]
+    fn leaf_divisions_match_the_host_round_trip() {
+        let expected = (1..=1000u32).fold(0u32, |h, i| h.wrapping_add(i / 7).wrapping_add(i % 13));
+        assert_eq!(divisions(1000, false).0, expected);
+        assert_eq!(divisions(1000, true).0, expected);
+    }
+
+    #[test]
+    #[ignore] // release timing; run explicitly
+    fn leaf_division_benchmark() {
+        for pass in 0..3 {
+            let n = 500_000;
+            let (off, on) = (divisions(n, false).1, divisions(n, true).1);
+            let per = |t: f64| t * 1e9 / (2 * n) as f64;
+            eprintln!("leaf pass={pass} per division: host round trip {:.1}ns, leaf {:.1}ns", per(off), per(on));
+        }
     }
 }

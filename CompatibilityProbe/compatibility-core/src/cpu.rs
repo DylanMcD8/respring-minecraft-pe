@@ -48,9 +48,19 @@ impl Cpu {
         self.branch(pc); self.regs_mut()[Self::LR] = lr.addr_with_thumb_bit(); previous
     }
     pub fn invalidate_cache_range(&mut self, base: u32, size: GuestUSize) { self.inner.invalidate_cache_range(base, size); }
+    pub(crate) fn set_leaf_host_calls(&mut self, on: bool) { self.inner.set_leaf_host_calls(on); }
+    pub(crate) fn register_leaf_host_function(&mut self, index: u32, symbol: &str) { self.inner.register_leaf_host_function(index, symbol); }
     pub fn run_or_step(&mut self, mem: &mut Mem, ticks: Option<&mut u64>) -> CpuState {
         let _timing = crate::diagnostics::scope(crate::diagnostics::Phase::Interpreter);
-        self.inner.run_or_step(mem, ticks)
+        match ticks {
+            Some(ticks) => {
+                let before = *ticks;
+                let state = self.inner.run_or_step(mem, Some(ticks));
+                crate::diagnostics::retired(before.saturating_sub(*ticks));
+                state
+            }
+            None => { crate::diagnostics::retired(1); self.inner.run_or_step(mem, None) }
+        }
     }
     pub(crate)fn configure_pipeline(&mut self,verified:bool,mem:&Mem,bins:&[crate::mach_o::MachO],flags:[bool;3]){self.inner.configure_pipeline(verified,mem,bins,flags)}
     pub fn dump_regs(&self) { Self::echo_regs(self.regs()); }

@@ -396,6 +396,27 @@ impl Mem {
             .get_mut(..count as usize)
     }
 
+    /// [Self::get_bytes_fallible] for one scalar, as the interpreter's per-
+    /// instruction fetch/load path: the same null-segment and end-of-space
+    /// checks, then a single unaligned read.
+    #[inline(always)]
+    pub(crate) fn read_fallible<T: SafeRead>(&self, addr: VAddr) -> Option<T> {
+        if addr < self.null_segment_size || u64::from(addr) + u64::from(guest_size_of::<T>()) > 1 << 32 {
+            return None;
+        }
+        Some(unsafe { self.bytes.cast::<u8>().add(addr as usize).cast::<T>().read_unaligned() })
+    }
+    /// Write counterpart of [Self::read_fallible]; `false` where
+    /// [Self::get_bytes_fallible_mut] would return [None].
+    #[inline(always)]
+    pub(crate) fn write_fallible<T: SafeWrite>(&mut self, addr: VAddr, value: T) -> bool {
+        if addr < self.null_segment_size || u64::from(addr) + u64::from(guest_size_of::<T>()) > 1 << 32 {
+            return false;
+        }
+        unsafe { self.bytes.cast::<u8>().add(addr as usize).cast::<T>().write_unaligned(value) };
+        true
+    }
+
     /// Get a slice for reading `count` bytes. This is the basic primitive for
     /// safe read-only memory access.
     ///
