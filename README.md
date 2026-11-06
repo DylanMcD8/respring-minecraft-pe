@@ -2,7 +2,7 @@
   <img src="docs/images/RespringHeader.webp" width="800" alt="Respring">
 </p>
 
-# Respring – Minecraft PE
+# Respring – Minecraft PE COMING SOON
 The classic Minecraft: Pocket Edition (v0.9.0, pre-Bedrock), restored with the help of Codex (GPT-6 Astra) for modern iPhones and iPads as part of project Respring!
 
 ### TO DO!!
