@@ -28,6 +28,7 @@ for framework in "${frameworks[@]}"; do
   rust_flags+=(-C link-arg=-framework -C "link-arg=$framework")
   link+=(-framework "$framework")
 done
+link+=(-framework IOSurface) # main.m only; kept out of the Rust flags so they don't change
 printf -v CARGO_ENCODED_RUSTFLAGS '%s\x1f' "${rust_flags[@]}"
 export CARGO_ENCODED_RUSTFLAGS=${CARGO_ENCODED_RUSTFLAGS%$'\x1f'}
 cargo build --manifest-path "$root/ios/rust-entry/Cargo.toml" --target "$target" --release --offline --locked

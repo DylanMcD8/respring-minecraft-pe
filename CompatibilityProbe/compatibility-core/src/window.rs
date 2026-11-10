@@ -1446,7 +1446,7 @@ impl Window {
             gl_ctx.DeleteTextures(1, &texture);
         };
 
-        self.window.gl_swap_window();
+        self.present_window();
 
         // hold onto GL context so the image doesn't disappear, and hold
         // onto image so we can rotate later if necessary
@@ -1454,11 +1454,21 @@ impl Window {
 
     /// Swap front-buffer and back-buffer so the result of OpenGL rendering is
     /// presented.
+    // The iOS host may present through layer contents instead of SDL's drawable.
+    fn present_window(&self) {
+        #[cfg(target_os="ios")]
+        {
+            extern "C" { fn minecraft_surface_swap() -> bool; }
+            if unsafe { minecraft_surface_swap() } { return; }
+        }
+        self.window.gl_swap_window();
+    }
+
     pub fn swap_window(&self) {
         let _timing = crate::diagnostics::scope(crate::diagnostics::Phase::Swap);
         #[cfg(target_os="ios")]
         let game_tag=GamePresentationTag::begin();
-        self.window.gl_swap_window();
+        self.present_window();
         #[cfg(target_os="ios")]
         drop(game_tag);
         crate::diagnostics::frame(true);

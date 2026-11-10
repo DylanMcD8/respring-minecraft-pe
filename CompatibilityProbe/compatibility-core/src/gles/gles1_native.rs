@@ -98,7 +98,9 @@ impl GLES for GLES1Native<'_> {
     unsafe fn BindWindowFramebuffer(&mut self) {
         extern "C" {
             fn SDL_UIKitBindCurrentDrawable() -> std::ffi::c_int;
+            fn minecraft_surface_bind() -> std::ffi::c_int;
         }
+        if minecraft_surface_bind() != 0 { return; }
         assert_eq!(SDL_UIKitBindCurrentDrawable(), 0, "No SDL UIKit drawable for presentation");
     }
 

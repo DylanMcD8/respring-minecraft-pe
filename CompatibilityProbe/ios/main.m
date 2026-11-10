@@ -4,6 +4,10 @@
 #include <stdint.h>
 #import <UIKit/UIKit.h>
 #import <OpenGLES/EAGL.h>
+#import <OpenGLES/EAGLIOSurface.h>
+#import <OpenGLES/ES1/gl.h>
+#import <OpenGLES/ES1/glext.h>
+#import <IOSurface/IOSurfaceRef.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #include <math.h>
@@ -238,6 +242,112 @@ static BOOL minecraftPresent(id context, SEL selector, NSUInteger target) {
         submittedImages++;
     }
     return presented;
+}
+// The system paces an EAGL drawable's presents at 60 even on a 120 Hz panel:
+// the next frame's first draw to the window blocks until the last one is
+// taken. Above 60, draw the window image into an IOSurface instead and hand
+// that to Core Animation, which takes a new one every refresh.
+// MINECRAFT_SURFACE_PRESENT=0/1 overrides the choice.
+static CALayer *surfaceLayer;
+static IOSurfaceRef surfaces[3];
+static GLuint surfaceTextures[3], surfaceFramebuffer;
+static int surfaceIndex, surfaceWidth, surfaceHeight, surfaceMode = -1;
+static BOOL surfaceBound;
+static int minecraftSurfaceUnavailable(const char *reason) {
+    if (reason) {
+        NSLog(@"Minecraft surface present off: %s", reason);
+        surfaceMode = 0;
+    }
+    if (surfaceLayer && !surfaceLayer.hidden) surfaceLayer.hidden = YES;
+    return 0;
+}
+// Called in place of binding SDL's drawable. Returns 0 to use that instead.
+int minecraft_surface_bind(void) {
+    extern int SDL_UIKitBindCurrentDrawable(void);
+    if (surfaceMode < 0) {
+        const char *mode = getenv("MINECRAFT_SURFACE_PRESENT");
+        surfaceMode = mode ? atoi(mode) != 0 : backgroundFrameLimit > 60;
+    }
+    surfaceBound = NO;
+    if (!surfaceMode || !NSThread.isMainThread) return 0;
+    EAGLContext *context = EAGLContext.currentContext;
+    UIView *view = [context respondsToSelector:@selector(sdlView)] ? [context sdlView] : nil;
+    if (!view.window || context.API != kEAGLRenderingAPIOpenGLES1) return minecraftSurfaceUnavailable(NULL);
+    // SDL attaches a context's view to the window when its drawable is bound.
+    if (SDL_UIKitBindCurrentDrawable() != 0) return minecraftSurfaceUnavailable(NULL);
+    // Same rounding as SDL's backing size, which Window::viewport reads.
+    int width = (int)(view.bounds.size.width * view.contentScaleFactor);
+    int height = (int)(view.bounds.size.height * view.contentScaleFactor);
+    if (width <= 0 || height <= 0) return minecraftSurfaceUnavailable(NULL);
+    if (width != surfaceWidth || height != surfaceHeight) {
+        GLint texture = 0;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture);
+        BOOL attached = YES;
+        for (int i = 0; i < 3; i++) {
+            if (surfaceTextures[i]) glDeleteTextures(1, &surfaceTextures[i]);
+            if (surfaces[i]) CFRelease(surfaces[i]);
+            surfaces[i] = IOSurfaceCreate((CFDictionaryRef)@{
+                (id)kIOSurfaceWidth: @(width), (id)kIOSurfaceHeight: @(height),
+                (id)kIOSurfaceBytesPerElement: @4, (id)kIOSurfacePixelFormat: @((uint32_t)'BGRA')});
+            glGenTextures(1, &surfaceTextures[i]);
+            glBindTexture(GL_TEXTURE_2D, surfaceTextures[i]);
+            attached = attached && surfaces[i] && [context texImageIOSurface:surfaces[i] target:GL_TEXTURE_2D internalFormat:GL_RGBA
+                width:width height:height format:GL_BGRA_EXT type:GL_UNSIGNED_BYTE plane:0];
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        glBindTexture(GL_TEXTURE_2D, texture);
+        surfaceWidth = surfaceHeight = 0;
+        if (!attached) return minecraftSurfaceUnavailable("could not back a texture with an IOSurface");
+        if (!surfaceFramebuffer) glGenFramebuffersOES(1, &surfaceFramebuffer);
+        surfaceWidth = width;
+        surfaceHeight = height;
+        NSLog(@"Minecraft surface present: %dx%d", width, height);
+    }
+    // Core Animation may still be showing the surface after the last one.
+    for (int i = 0; i < 2 && IOSurfaceIsInUse(surfaces[surfaceIndex]); i++) surfaceIndex = (surfaceIndex + 1) % 3;
+    glBindFramebufferOES(GL_FRAMEBUFFER_OES, surfaceFramebuffer);
+    glFramebufferTexture2DOES(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_TEXTURE_2D, surfaceTextures[surfaceIndex], 0);
+    if (glCheckFramebufferStatusOES(GL_FRAMEBUFFER_OES) != GL_FRAMEBUFFER_COMPLETE_OES) {
+        SDL_UIKitBindCurrentDrawable();
+        return minecraftSurfaceUnavailable("framebuffer incomplete");
+    }
+    surfaceBound = YES;
+    return 1;
+}
+// Called in place of SDL's swap. Returns false if the frame went to SDL's drawable.
+bool minecraft_surface_swap(void) {
+    if (!surfaceBound) return false;
+    surfaceBound = NO;
+    UIView *view = minecraftUpdateDrawable(EAGLContext.currentContext);
+    // The compositor reads the surface after everything queued here.
+    glFlush();
+    [CATransaction begin];[CATransaction setDisableActions:YES];
+    if (!surfaceLayer) {
+        surfaceLayer = [CALayer new];
+        surfaceLayer.opaque = YES;
+        surfaceLayer.contentsGravity = kCAGravityResize;
+        // GL rows run bottom-up.
+        surfaceLayer.transform = CATransform3DMakeScale(1, -1, 1);
+    }
+    if (surfaceLayer.superlayer != view.layer) {
+        [surfaceLayer removeFromSuperlayer];[view.layer insertSublayer:surfaceLayer atIndex:0];
+    }
+    surfaceLayer.bounds = view.bounds;
+    surfaceLayer.position = CGPointMake(CGRectGetMidX(view.bounds), CGRectGetMidY(view.bounds));
+    surfaceLayer.contents = (id)surfaces[surfaceIndex];
+    surfaceLayer.hidden = NO;
+    // SDL unhides a context's view only in its own swap.
+    if (view.hidden && [view respondsToSelector:@selector(presentInSDLWindow)])
+        [view performSelector:@selector(presentInSDLWindow)];
+    [CATransaction commit];
+    [CATransaction flush];
+    surfaceIndex = (surfaceIndex + 1) % 3;
+    minecraftConfigureRefresh(view);
+    submittedImages++;
+    return true;
 }
 void minecraft_native_present_hide(void) {
     if (NSThread.isMainThread) nativeCanvas.hidden = YES;
