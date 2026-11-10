@@ -425,6 +425,10 @@ impl Window {
         // targets from UIScreen. Give them the same logical canvas at startup.
         if options.expand_landscape_canvas {
             let (width, height) = window.drawable_size();
+            // The guest only lays out wider than tall. A host window that
+            // starts taller than wide (iPad or unfolded Duo held upright) gets
+            // the canvas it would have once turned; viewport() fits it until then.
+            let (width, height) = (width.max(height), width.min(height));
             if width > 0 && height > 0 {
                 let aspect = f64::from(width) / f64::from(height);
                 let (short, long) = guest_portrait_size;
@@ -1571,7 +1575,13 @@ impl Window {
         if mode == crate::wrapper_resolution::Mode::Canvas {
             // The host context is current. The screen viewport now reports
             // backing pixels, including bars when the legacy canvas is fitted.
-            let (_, _, width, height) = self.viewport();
+            let (_, _, mut width, mut height) = self.viewport();
+            // Latched for the whole run, so size it for the window turned
+            // sideways when the canvas only fills the screen that way.
+            let (dw, dh) = self.window.drawable_size();
+            if self.expanded_canvas && dw < dh {
+                (width, height) = (dh, (f64::from(height) * f64::from(dh) / f64::from(width.max(1))).round() as u32);
+            }
             let target = Size::new(height, width);
             if !target.valid() { return Err("Invalid native canvas size".into()); }
             self.wrapper_target = Some(target);
