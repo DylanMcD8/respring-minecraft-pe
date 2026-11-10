@@ -50,7 +50,18 @@ is why most of the work below targets those.
 - `window.rs`: poll throttle raised to 1/240 s so 120 Hz ticks aren't coalesced.
 - `main.m` `minecraftConfigureRefresh`: the display-link observer is installed for
   background terrain modes even with profiling and the FPS label off, so the guest
-  follows the link's vsync deadlines instead of the NSTimer path.
+  follows the link's vsync deadlines instead of the NSTimer path. This only paces
+  on device: `minecraft_presentation::refresh` is compiled out for the simulator.
+- `main.m` `minecraft_surface_bind`/`minecraft_surface_swap`, `window.rs`
+  `present_window`, `gles1_native.rs` `BindWindowFramebuffer`: above 60 FPS the
+  window image is drawn into an IOSurface-backed texture and handed to Core
+  Animation as layer contents, instead of presenting SDL's EAGL drawable. The
+  system paces EAGL presents at 60 even with the panel at 120 Hz (the next frame's
+  first draw to the window blocked 10–14 ms), and that wait stalled the one host
+  thread every guest thread shares. Three surfaces rotate, skipping any Core
+  Animation still holds. 30/60/original modes keep the EAGL present.
+  `MINECRAFT_SURFACE_PRESENT=0/1` overrides the choice. Cost: three window-sized
+  BGRA surfaces (about 69 MB at 2853×2007) on top of SDL's now-idle renderbuffer.
 - `main.m` `registerDefaults` + `Settings.bundle/Root.plist`: TerrainProcessing defaults
   to `background120`, clamped to `UIScreen.maximumFramesPerSecond`, so ProMotion
   devices run at 120 and everything else at 60. Before, the plist said 60 and the
@@ -58,6 +69,16 @@ is why most of the work below targets those.
 
 Simulator result: the display went from about 30 distinct images/s (137–159 per
 5 s, label ~50 FPS) to every guest frame presented at 60 Hz. p95 went 20 → 19 ms.
+That gain comes from the scheduler and poll changes above; the vsync-following path
+doesn't run on the simulator.
+
+Device result (iPhone Duo, idle title screen, `background120`, 5 s windows, picture
+checked with `devicectl device capture screenshot`):
+
+| Present | Host FPS | Composite | New images / 5 s |
+|---|---|---|---|
+| EAGL drawable | 60.0 | 13–15 ms | 300 |
+| IOSurface layer contents | 119–120 | 0.4–0.6 ms | 596–600 |
 
 ### Drawable and GL
 - `window.rs`: an RGB888 drawable with no depth or stencil and retained backing off.
@@ -143,11 +164,27 @@ draws the panorama or its fog. Check on device before treating it as a bug.
 
 ## Remaining work, in order of expected payoff
 
-1. **Device verification at 120 Hz.** Run with `MINECRAFT_PROFILE=1` on a ProMotion
-   iPhone/iPad (TerrainProcessing now defaults to `background120`). Check that
-   `native_refresh_window.callbacks` is ~600/5 s and how many of those carry new
-   images, and repeat the interpreter A/B with the LTO release build. Watch thermals
-   over a long session; if it throttles, `background60` is one Settings toggle away.
+1. **In-world frame rate on device.** The idle title screen holds 120 with the
+   IOSurface present; a world hasn't been profiled with it. On the EAGL present a
+   world cost 7–9 ms of CPU per frame, so expect the interpreter to be the limit
+   there. Watch thermals over a long session; `background60` is one Settings
+   toggle away. Display-link ticks are also picked up late (the 1/240 s poll
+   throttle in `window.rs` plus the 1 ms re-sleep steps in
+   `minecraft_refresh_deadline`), which is likely why p95 is 9.2–9.9 ms, not 8.3.
+
+   What was tried on the EAGL drawable first, all measured on the Duo with the
+   display link confirmed at 8.33 ms throughout, so nobody repeats it:
+   - Plain `presentRenderbuffer:`: 60.0.
+   - Display-link range floor raised to 120, or a second link on its own thread
+     ticking 600 times per 5 s: still 60.0.
+   - `presentRenderbuffer:atTime:` (now, or the link's next target) and
+     `CAEAGLLayer.presentsWithTransaction`: 60.0.
+   - A small always-running 120 Hz Core Animation animation in the window: 80.0.
+     Other on-screen animation (a video in picture-in-picture, a banner) probably
+     does the same, which would explain the old build showing 120 for a while.
+   - `presentRenderbuffer:afterMinimumDuration:`: every counter reads 120 but no
+     frame after the first reaches the screen. **Counters can't verify a present;
+     look at the picture.**
 2. **Block decode cache.** `step_one` decodes every instruction from scratch. A
    per-basic-block cache is the next big interpreter win. It needs invalidation on
    dyld stub rewrites and on the code patches applied at load time
